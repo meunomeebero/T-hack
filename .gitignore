@@ -1,0 +1,29 @@
+.DS_Store
+node_modules/
+npm-debug.log*
+server.log
+
+# Local runtime data
+data/
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# Neighbor projects that live in this folder but are not part of terminal-hack.
+berolab/
+beroland/
+content/
+curriculol/
+curriculol-suggestions/
+cutheshitube/
+ebook/
+indie/
+m2i/
+me/
+nuvion/
+skills/
+tirinhas/
+tools/
+videomaker/

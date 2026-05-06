@@ -1,0 +1,14 @@
+{
+  "name": "terminal-hack",
+  "version": "2.0.0",
+  "description": "Multiplayer terminal typing game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "ws": "^8.16.0"
+  }
+}

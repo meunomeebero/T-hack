@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TERMINAL HACK // ARCADE ONLINE</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="home-body">
+  <main class="home-shell">
+    <header class="home-header">
+      <div>
+        <p class="eyebrow">TERMINAL HACK v2.0</p>
+        <h1 class="section-title">Terminal Hack</h1>
+      </div>
+      <div class="home-meta">
+        <span>ROUNDS: 05</span>
+        <span>TIME: 30S</span>
+        <span>MODE: 1V1</span>
+      </div>
+    </header>
+
+    <section class="hero-grid">
+      <aside class="panel match-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">SESSION BOOT</p>
+            <h2>Entrar na fila</h2>
+          </div>
+          <div class="connection-pill" id="connection-pill" data-state="offline">
+            <span class="connection-dot"></span>
+            <span id="connection-status">offline</span>
+          </div>
+        </div>
+
+        <form class="match-form" id="match-form">
+          <div>
+            <label class="field-label" for="username-input">Username</label>
+            <input
+              class="text-input"
+              type="text"
+              id="username-input"
+              maxlength="20"
+              autocomplete="off"
+              placeholder="digite seu alias..."
+            >
+          </div>
+
+          <button class="action-button primary" type="submit" id="find-match-btn">
+            &gt; buscar partida
+          </button>
+        </form>
+
+        <div class="status-copy" id="status-area">Conecte-se e entre na fila quando quiser.</div>
+
+        <div class="micro-copy">
+          <p>░ SEM LOGIN. USERNAME DIRETO NA ARENA.</p>
+          <p>░ COMANDOS GERADOS E VALIDADOS NO SERVIDOR.</p>
+        </div>
+      </aside>
+
+      <section class="terminal-preview" aria-label="terminal preview">
+        <div class="terminal-preview-header">
+          <span>LOCAL NODE</span>
+          <span>WAITING FOR MATCH...</span>
+        </div>
+        <pre>┌──────────────────────────────┐
+│ ACCESS VECTOR                │
+│                              │
+│ &gt; register username          │
+│ &gt; find_match                 │
+│ &gt; await opponent             │
+│                              │
+│ STATUS: READY                │
+└──────────────────────────────┘</pre>
+      </section>
+    </section>
+
+    <section class="panel leaderboard-panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">RANKING GLOBAL</p>
+          <h2>Top hackers da arena</h2>
+        </div>
+        <div class="pill-row">
+          <div class="info-chip">VITORIAS POR USERNAME</div>
+        </div>
+      </div>
+
+      <div class="leaderboard-grid">
+        <article class="leader-highlight" id="leader-highlight">
+          <div class="label">Carregando leaderboard</div>
+          <div class="name">aguarde</div>
+          <div class="score"><span>--</span><small>pts</small></div>
+        </article>
+
+        <ol class="leaderboard-list" id="ranking-list">
+          <li class="placeholder-card">Buscando ranking mais recente...</li>
+        </ol>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function() {
+      const WS_URL = window.location.protocol === "https:"
+        ? "wss://" + window.location.host
+        : "ws://" + window.location.host;
+
+      const STORAGE = {
+        username: "terminalHackUsername",
+        clientId: "terminalHackClientId",
+        queueAgain: "terminalHackQueueAgain"
+      };
+
+      let ws = null;
+      let isSearching = false;
+      let pendingSearch = false;
+      let username = localStorage.getItem(STORAGE.username) || "";
+      const clientId = getOrCreateClientId();
+
+      const elements = {
+        matchForm: document.getElementById("match-form"),
+        usernameInput: document.getElementById("username-input"),
+        findMatchBtn: document.getElementById("find-match-btn"),
+        statusArea: document.getElementById("status-area"),
+        rankingList: document.getElementById("ranking-list"),
+        leaderHighlight: document.getElementById("leader-highlight"),
+        connectionPill: document.getElementById("connection-pill"),
+        connectionStatus: document.getElementById("connection-status")
+      };
+
+      function init() {
+        elements.usernameInput.value = username;
+        pendingSearch = sessionStorage.getItem(STORAGE.queueAgain) === "1";
+        sessionStorage.removeItem(STORAGE.queueAgain);
+
+        bindEvents();
+        updateSearchButton();
+        connect();
+      }
+
+      function bindEvents() {
+        elements.matchForm.addEventListener("submit", function(event) {
+          event.preventDefault();
+
+          if (isSearching) {
+            cancelSearch();
+            return;
+          }
+
+          beginSearch();
+        });
+
+        elements.usernameInput.addEventListener("input", function(event) {
+          username = sanitizeUsername(event.target.value);
+          localStorage.setItem(STORAGE.username, username);
+        });
+      }
+
+      function getOrCreateClientId() {
+        let value = sessionStorage.getItem(STORAGE.clientId);
+        if (!value) {
+          value = window.crypto && window.crypto.randomUUID
+            ? window.crypto.randomUUID()
+            : "client_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
+          sessionStorage.setItem(STORAGE.clientId, value);
+        }
+        return value;
+      }
+
+      function connect() {
+        updateConnectionStatus("connecting");
+        ws = new WebSocket(WS_URL);
+
+        ws.onopen = function() {
+          updateConnectionStatus("connected");
+
+          if (username) {
+            register(username);
+          }
+
+          fetchRankings();
+
+          if (pendingSearch && !isSearching && username) {
+            triggerSearch();
+          }
+        };
+
+        ws.onclose = function() {
+          updateConnectionStatus("offline");
+
+          if (isSearching) {
+            pendingSearch = true;
+            isSearching = false;
+            updateSearchButton();
+            showStatus("reconectando ao servidor para manter a fila...", "searching");
+          }
+
+          window.setTimeout(connect, 1800);
+        };
+
+        ws.onerror = function() {
+          updateConnectionStatus("offline");
+        };
+
+        ws.onmessage = function(event) {
+          handleMessage(JSON.parse(event.data));
+        };
+      }
+
+      function register(nextUsername) {
+        if (!isSocketOpen()) {
+          return;
+        }
+
+        ws.send(JSON.stringify({
+          type: "register",
+          username: nextUsername,
+          clientId: clientId
+        }));
+      }
+
+      function fetchRankings() {
+        if (!isSocketOpen()) {
+          return;
+        }
+
+        ws.send(JSON.stringify({ type: "get_rankings" }));
+      }
+
+      function beginSearch() {
+        username = sanitizeUsername(elements.usernameInput.value);
+        elements.usernameInput.value = username;
+        localStorage.setItem(STORAGE.username, username);
+
+        if (!username) {
+          showStatus("digite um username para entrar na arena.", "error");
+          elements.usernameInput.focus();
+          return;
+        }
+
+        register(username);
+
+        if (!isSocketOpen()) {
+          pendingSearch = true;
+          showStatus("conectando ao servidor...", "searching");
+          return;
+        }
+
+        triggerSearch();
+      }
+
+      function triggerSearch() {
+        if (!isSocketOpen()) {
+          pendingSearch = true;
+          return;
+        }
+
+        pendingSearch = false;
+        isSearching = true;
+        updateSearchButton();
+
+        ws.send(JSON.stringify({ type: "find_match" }));
+        showStatus("procurando um oponente para voce...", "searching");
+      }
+
+      function cancelSearch() {
+        pendingSearch = false;
+        isSearching = false;
+        updateSearchButton();
+
+        if (isSocketOpen()) {
+          ws.send(JSON.stringify({ type: "cancel_match" }));
+        }
+
+        showStatus("busca cancelada.", "");
+      }
+
+      function handleMessage(message) {
+        switch (message.type) {
+          case "registered":
+            username = sanitizeUsername(message.username);
+            elements.usernameInput.value = username;
+            localStorage.setItem(STORAGE.username, username);
+            break;
+
+          case "rankings":
+            renderRankings(message.rankings || []);
+            break;
+
+          case "searching":
+            isSearching = true;
+            updateSearchButton();
+            showStatus("fila aberta: aguardando outro terminal...", "searching");
+            break;
+
+          case "match_found":
+            isSearching = false;
+            pendingSearch = false;
+            updateSearchButton();
+            sessionStorage.setItem("gameData", JSON.stringify({
+              gameId: message.gameId,
+              playerIndex: message.playerIndex,
+              username: username,
+              opponent: message.opponent,
+              commands: Array.isArray(message.commands) ? message.commands : [],
+              totalRounds: message.totalRounds || 5,
+              roundTimeLimitMs: message.roundTimeLimitMs || 30000,
+              clientId: clientId
+            }));
+            window.location.href = "/game.html";
+            break;
+
+          case "cancelled":
+            isSearching = false;
+            updateSearchButton();
+            showStatus("busca cancelada.", "");
+            break;
+
+          case "error":
+            isSearching = false;
+            pendingSearch = false;
+            updateSearchButton();
+            showStatus(message.message || "nao foi possivel entrar na fila.", "error");
+            break;
+        }
+      }
+
+      function renderRankings(rankings) {
+        if (!rankings.length) {
+          elements.leaderHighlight.innerHTML = [
+            '<div class="label">Ainda sem lider</div>',
+            '<div class="name">seja o primeiro</div>',
+            '<div class="score"><span>0</span><small>pts</small></div>'
+          ].join("");
+          elements.rankingList.innerHTML = '<li class="placeholder-card">Nenhuma vitoria registrada ainda.</li>';
+          return;
+        }
+
+        const leader = rankings[0];
+        elements.leaderHighlight.innerHTML = [
+          '<div class="label">Lider atual</div>',
+          '<div class="name">' + escapeHtml(leader.username) + '</div>',
+          '<div class="score"><span>' + leader.score + '</span><small>pts</small></div>'
+        ].join("");
+
+        elements.rankingList.innerHTML = rankings.slice(0, 6).map(function(player, index) {
+          return [
+            '<li class="leader-item">',
+            '  <div class="leader-rank">#' + (index + 1) + "</div>",
+            '  <div class="leader-meta">',
+            "    <strong>" + escapeHtml(player.username) + "</strong>",
+            "    <span>" + player.score + " vitorias acumuladas</span>",
+            "  </div>",
+            '  <div class="leader-score">' + player.score + " pts</div>",
+            "</li>"
+          ].join("");
+        }).join("");
+      }
+
+      function updateSearchButton() {
+        elements.findMatchBtn.textContent = isSearching
+          ? "> cancelar busca"
+          : "> buscar partida";
+      }
+
+      function updateConnectionStatus(state) {
+        const copy = {
+          connected: "online",
+          connecting: "conectando",
+          offline: "offline"
+        };
+
+        elements.connectionPill.dataset.state = state;
+        elements.connectionStatus.textContent = copy[state];
+      }
+
+      function showStatus(text, tone) {
+        elements.statusArea.textContent = text;
+        elements.statusArea.className = "status-copy" + (tone ? " " + tone : "");
+      }
+
+      function sanitizeUsername(value) {
+        return String(value || "").replace(/\s+/g, " ").trim().slice(0, 20);
+      }
+
+      function isSocketOpen() {
+        return ws && ws.readyState === WebSocket.OPEN;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>

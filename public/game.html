@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TERMINAL HACK // COMBATE</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="game-body">
+  <canvas class="confetti-canvas" id="confetti-canvas"></canvas>
+
+  <div class="game-container" id="game-screen">
+    <div class="split-screen">
+      <div class="player-panel">
+        <div class="terminal" id="terminal-left">
+          <div class="terminal-header">
+            <span id="p1-label">P1: LOCAL</span>
+            <span id="terminal-left-tag">TERMINAL HACK</span>
+          </div>
+          <canvas id="game-canvas-left"></canvas>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-bar-fill" id="progress-left"></div>
+        </div>
+        <div class="hack-status" id="hack-status">
+          <span>SISTEMA HACKEADO: </span><span id="hack-pct">0</span>%
+        </div>
+        <div class="keyboard" id="keyboard-left"></div>
+      </div>
+
+      <div class="player-panel">
+        <div class="terminal" id="terminal-right">
+          <div class="terminal-header">
+            <span id="p2-label">P2: REMOTE</span>
+            <span id="terminal-right-tag">WAITING...</span>
+          </div>
+          <canvas id="game-canvas-right"></canvas>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-bar-fill" id="progress-right"></div>
+        </div>
+        <div class="hack-status" id="hack-status-right">
+          <span>SISTEMA HACKEADO: </span><span id="hack-pct-right">0</span>%
+        </div>
+        <div class="keyboard" id="keyboard-right"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="logic-only hidden" id="lobby-screen">
+    <span id="ready-status"></span>
+    <span id="my-name"></span>
+    <span id="opp-name"></span>
+    <span id="connection-pill" data-state="connecting"></span>
+    <span id="connection-status"></span>
+    <span id="status-banner"></span>
+    <span id="timer-value"></span>
+    <span id="my-round-value"></span>
+    <span id="opp-round-value"></span>
+    <span id="hud-connection-value"></span>
+    <span id="my-state-text"></span>
+    <span id="opp-state-text"></span>
+    <span id="telemetry-round"></span>
+    <span id="telemetry-status"></span>
+    <span id="telemetry-input"></span>
+    <span id="telemetry-progress"></span>
+  </div>
+
+  <div class="result-overlay hidden" id="result-overlay">
+    <div class="panel result-card">
+      <p class="eyebrow" id="result-eyebrow">Match resolved</p>
+      <h2 id="result-text">sistema hackeado</h2>
+      <p id="result-sub">resultado indisponivel.</p>
+
+      <div class="result-grid">
+        <div class="metric-card">
+          <span>seu placar</span>
+          <strong id="result-my-score">0 / 5</strong>
+        </div>
+        <div class="metric-card">
+          <span>rival</span>
+          <strong id="result-opp-score">0 / 5</strong>
+        </div>
+      </div>
+
+      <div class="result-actions">
+        <button class="action-button primary" id="play-again-btn">&gt; jogar novamente</button>
+        <button class="action-button secondary" id="home-btn">&gt; voltar para home</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const WS_URL = window.location.protocol === "https:"
+        ? "wss://" + window.location.host
+        : "ws://" + window.location.host;
+
+      const STORAGE = {
+        username: "terminalHackUsername",
+        queueAgain: "terminalHackQueueAgain"
+      };
+
+      const KEYBOARD_LAYOUT = [
+        ["Esc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="],
+        ["Tab", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "[", "]"],
+        ["Caps", "A", "S", "D", "F", "G", "H", "J", "K", "L", ";", "'", "Enter"],
+        ["Shift", "Z", "X", "C", "V", "B", "N", "M", ",", ".", "/", "Shift"],
+        ["Ctrl", "Win", "Alt", "Space", "Alt", "Win", "Ctrl"]
+      ];
+
+      const ASCII_LABELS = [
+        "ACCESS VECTOR",
+        "PAYLOAD STREAM",
+        "STACK OVERFLOW",
+        "REMOTE SHELL",
+        "ROOT SIGNAL",
+        "SYS TRACE"
+      ];
+
+      const elements = {
+        lobbyScreen: document.getElementById("lobby-screen"),
+        gameScreen: document.getElementById("game-screen"),
+        readyStatus: document.getElementById("ready-status"),
+        statusBanner: document.getElementById("status-banner"),
+        myName: document.getElementById("my-name"),
+        oppName: document.getElementById("opp-name"),
+        p1Label: document.getElementById("p1-label"),
+        p2Label: document.getElementById("p2-label"),
+        terminalLeftTag: document.getElementById("terminal-left-tag"),
+        terminalRightTag: document.getElementById("terminal-right-tag"),
+        progressLeft: document.getElementById("progress-left"),
+        progressRight: document.getElementById("progress-right"),
+        myProgressText: document.getElementById("hack-pct"),
+        oppProgressText: document.getElementById("hack-pct-right"),
+        myStateText: document.getElementById("my-state-text"),
+        oppStateText: document.getElementById("opp-state-text"),
+        timerValue: document.getElementById("timer-value"),
+        myRoundValue: document.getElementById("my-round-value"),
+        oppRoundValue: document.getElementById("opp-round-value"),
+        telemetryRound: document.getElementById("telemetry-round"),
+        telemetryStatus: document.getElementById("telemetry-status"),
+        telemetryInput: document.getElementById("telemetry-input"),
+        telemetryProgress: document.getElementById("telemetry-progress"),
+        keyboardLeft: document.getElementById("keyboard-left"),
+        keyboardRight: document.getElementById("keyboard-right"),
+        connectionPill: document.getElementById("connection-pill"),
+        connectionStatus: document.getElementById("connection-status"),
+        hudConnectionValue: document.getElementById("hud-connection-value"),
+        resultOverlay: document.getElementById("result-overlay"),
+        resultEyebrow: document.getElementById("result-eyebrow"),
+        resultText: document.getElementById("result-text"),
+        resultSub: document.getElementById("result-sub"),
+        resultMyScore: document.getElementById("result-my-score"),
+        resultOppScore: document.getElementById("result-opp-score"),
+        playAgainBtn: document.getElementById("play-again-btn"),
+        homeBtn: document.getElementById("home-btn"),
+        confettiCanvas: document.getElementById("confetti-canvas"),
+        canvasLeft: document.getElementById("game-canvas-left"),
+        canvasRight: document.getElementById("game-canvas-right")
+      };
+
+      let ws = null;
+      let reconnectTimer = null;
+      let gameData = null;
+      let username = "";
+      let clientId = "";
+      let opponentName = "";
+      let commands = [];
+      let totalRounds = 5;
+      let roundTimeLimitMs = 30000;
+      let startTimestamp = null;
+      let gameStarted = false;
+      let gameOver = false;
+      let resultShown = false;
+      let lastFrameTime = 0;
+      let ticker = 0;
+      let confettiFrame = null;
+      let confettiParticles = [];
+
+      const activeKeys = {};
+      const localState = createPlayerState();
+      const remoteState = createPlayerState();
+
+      function createPlayerState() {
+        return {
+          input: "",
+          roundIndex: 0,
+          completedRounds: 0,
+          progress: 0,
+          awaitingRoundAck: false,
+          disconnected: false
+        };
+      }
+
+      function init() {
+        const stored = sessionStorage.getItem("gameData");
+        if (!stored) {
+          window.location.href = "/index.html";
+          return;
+        }
+
+        gameData = JSON.parse(stored);
+        username = gameData.username || localStorage.getItem(STORAGE.username) || "";
+        clientId = gameData.clientId;
+        opponentName = gameData.opponent || "OPPONENT";
+        commands = Array.isArray(gameData.commands) ? gameData.commands : [];
+        totalRounds = gameData.totalRounds || commands.length || 5;
+        roundTimeLimitMs = gameData.roundTimeLimitMs || 30000;
+
+        bindUi();
+        createKeyboard();
+        syncLabels();
+        resizeCanvases();
+        refreshUi();
+        connect();
+        requestAnimationFrame(gameLoop);
+      }
+
+      function bindUi() {
+        window.addEventListener("resize", resizeCanvases);
+        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
+
+        elements.playAgainBtn.addEventListener("click", function() {
+          localStorage.setItem(STORAGE.username, username);
+          sessionStorage.setItem(STORAGE.queueAgain, "1");
+          sessionStorage.removeItem("gameData");
+          window.location.href = "/index.html";
+        });
+
+        elements.homeBtn.addEventListener("click", function() {
+          localStorage.setItem(STORAGE.username, username);
+          sessionStorage.removeItem(STORAGE.queueAgain);
+          sessionStorage.removeItem("gameData");
+          window.location.href = "/index.html";
+        });
+      }
+
+      function syncLabels() {
+        elements.myName.textContent = username.toUpperCase();
+        elements.oppName.textContent = opponentName.toUpperCase();
+        elements.p1Label.textContent = "P1: LOCAL";
+        elements.p2Label.textContent = "P2: REMOTE";
+        elements.terminalLeftTag.textContent = "TERMINAL HACK";
+        elements.terminalRightTag.textContent = "WAITING...";
+      }
+
+      function createKeyboard() {
+        elements.keyboardLeft.innerHTML = "";
+        elements.keyboardRight.innerHTML = '<div style="text-align:center;color:#8a8a6f;font-size:9px;">WAITING FOR PLAYER...</div>';
+
+        KEYBOARD_LAYOUT.forEach(function(row) {
+          const rowElement = document.createElement("div");
+          rowElement.className = "key-row";
+
+          row.forEach(function(label) {
+            const key = document.createElement("div");
+            key.className = "key";
+            key.textContent = label;
+            key.dataset.key = keyNameToDataset(label);
+
+            if (label === "Space") {
+              key.classList.add("space");
+            } else if (["Tab", "Caps", "Enter", "Esc"].indexOf(label) !== -1) {
+              key.classList.add("wide");
+            } else if (["Shift", "Ctrl", "Alt", "Win"].indexOf(label) !== -1) {
+              key.classList.add("wider");
+            }
+
+            rowElement.appendChild(key);
+          });
+
+          elements.keyboardLeft.appendChild(rowElement);
+        });
+      }
+
+      function connect() {
+        updateConnectionStatus("connecting");
+        ws = new WebSocket(WS_URL);
+
+        ws.onopen = function() {
+          updateConnectionStatus("connected");
+          clearReconnectTimer();
+
+          ws.send(JSON.stringify({
+            type: "resume_game",
+            gameId: gameData.gameId,
+            clientId: clientId,
+            username: username
+          }));
+        };
+
+        ws.onclose = function() {
+          updateConnectionStatus("offline");
+
+          if (!gameOver) {
+            setNotice("conexao com o servidor perdida. tentando retomar a partida...", "warning");
+            scheduleReconnect();
+          }
+        };
+
+        ws.onerror = function() {
+          updateConnectionStatus("offline");
+        };
+
+        ws.onmessage = function(event) {
+          handleServerMessage(JSON.parse(event.data));
+        };
+      }
+
+      function scheduleReconnect() {
+        if (reconnectTimer) {
+          return;
+        }
+
+        reconnectTimer = window.setTimeout(function() {
+          reconnectTimer = null;
+          connect();
+        }, 1500);
+      }
+
+      function clearReconnectTimer() {
+        if (reconnectTimer) {
+          window.clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+      }
+
+      function handleServerMessage(message) {
+        switch (message.type) {
+          case "game_resumed":
+            opponentName = message.opponent || opponentName;
+            commands = Array.isArray(message.commands) ? message.commands : commands;
+            totalRounds = message.totalRounds || totalRounds;
+            roundTimeLimitMs = message.roundTimeLimitMs || roundTimeLimitMs;
+            syncLabels();
+            applyServerState(message.state || null);
+
+            if (isSocketOpen()) {
+              ws.send(JSON.stringify({ type: "game_ready", gameId: gameData.gameId }));
+            }
+
+            if (!gameStarted && !gameOver) {
+              elements.readyStatus.textContent = "terminal reconectado. aguardando oponente...";
+            }
+            break;
+
+          case "opponent_ready":
+            elements.readyStatus.textContent = "oponente confirmou. quase la...";
+            break;
+
+          case "game_start":
+            startGame(message.startedAt || Date.now(), message.timeLimitMs || roundTimeLimitMs);
+            setNotice("partida iniciada. derrube o sistema antes do rival.", "info");
+            break;
+
+          case "progress":
+            applyProgress(message);
+            break;
+
+          case "command_complete":
+            applyCommandComplete(message);
+            break;
+
+          case "opponent_connection_lost":
+            remoteState.disconnected = true;
+            elements.readyStatus.textContent = "oponente caiu. aguardando reconexao...";
+            setNotice("oponente desconectou. se ele nao voltar, a vitoria sera sua.", "warning");
+            refreshUi();
+            break;
+
+          case "opponent_reconnected":
+            remoteState.disconnected = false;
+            setNotice("oponente reconectou. a partida continua.", "success");
+            refreshUi();
+            break;
+
+          case "opponent_disconnected":
+            remoteState.disconnected = true;
+            finalizeMatch("win", "oponente desconectou. vitoria por abandono.", "forfeit");
+            break;
+
+          case "game_over":
+            finalizeFromServer(message);
+            break;
+
+          case "error":
+            if (!resultShown) {
+              finalizeMatch("lose", message.message || "nao foi possivel concluir a partida.", "error");
+            }
+            break;
+        }
+      }
+
+      function applyServerState(state) {
+        if (!state) {
+          return;
+        }
+
+        const selfKey = gameData.playerIndex === 0 ? "player0" : "player1";
+        const otherKey = gameData.playerIndex === 0 ? "player1" : "player0";
+        const selfState = state[selfKey];
+        const otherState = state[otherKey];
+
+        if (selfState) {
+          localState.input = selfState.input || "";
+          localState.roundIndex = selfState.roundIndex || 0;
+          localState.completedRounds = selfState.completedRounds || 0;
+          localState.progress = selfState.progress || 0;
+          localState.awaitingRoundAck = false;
+        }
+
+        if (otherState) {
+          remoteState.input = otherState.input || "";
+          remoteState.roundIndex = otherState.roundIndex || 0;
+          remoteState.completedRounds = otherState.completedRounds || 0;
+          remoteState.progress = otherState.progress || 0;
+          remoteState.disconnected = otherState.connected === false;
+        }
+
+        if (state.status === "active" && state.startedAt) {
+          startGame(state.startedAt, roundTimeLimitMs);
+        }
+
+        if (state.status === "finished" && !resultShown) {
+          finalizeFromServer({
+            winner: state.winner,
+            reason: state.reason
+          });
+        }
+
+        refreshUi();
+      }
+
+      function applyProgress(message) {
+        const targetState = message.playerIndex === gameData.playerIndex ? localState : remoteState;
+        targetState.input = message.input || "";
+        targetState.progress = message.progress || 0;
+
+        if (typeof message.roundIndex === "number") {
+          targetState.roundIndex = message.roundIndex;
+        }
+
+        if (typeof message.completedRounds === "number") {
+          targetState.completedRounds = message.completedRounds;
+        }
+
+        if (targetState === localState) {
+          localState.awaitingRoundAck = localState.input.length > 0
+            && localState.input.length === getCurrentCommand(localState).length;
+        }
+
+        refreshUi();
+      }
+
+      function applyCommandComplete(message) {
+        const targetState = message.playerIndex === gameData.playerIndex ? localState : remoteState;
+        targetState.completedRounds = typeof message.completedRounds === "number"
+          ? message.completedRounds
+          : targetState.completedRounds;
+        targetState.roundIndex = typeof message.roundIndex === "number"
+          ? message.roundIndex
+          : targetState.roundIndex;
+        targetState.input = "";
+        targetState.progress = 0;
+
+        if (targetState === localState) {
+          localState.awaitingRoundAck = false;
+          setNotice("round concluido. proximo payload carregado.", "success");
+        } else {
+          setNotice("o rival concluiu um round. acelere.", "warning");
+        }
+
+        refreshUi();
+      }
+
+      function startGame(startedAt, nextTimeLimitMs) {
+        gameStarted = true;
+        startTimestamp = startedAt || Date.now();
+        roundTimeLimitMs = nextTimeLimitMs || roundTimeLimitMs;
+        resizeCanvases();
+        window.requestAnimationFrame(resizeCanvases);
+        elements.readyStatus.textContent = "go";
+        refreshUi();
+      }
+
+      function handleKeyDown(event) {
+        const normalizedKey = normalizePhysicalKey(event.key);
+        if (normalizedKey) {
+          activeKeys[normalizedKey] = true;
+          refreshKeyboard();
+        }
+
+        if (!gameStarted || gameOver) {
+          return;
+        }
+
+        if (event.key === " ") {
+          event.preventDefault();
+        }
+
+        if (!isSocketOpen() || localState.awaitingRoundAck) {
+          return;
+        }
+
+        const command = getCurrentCommand(localState);
+        if (!command) {
+          return;
+        }
+
+        if (event.key === "Backspace") {
+          event.preventDefault();
+
+          if (localState.input.length > 0) {
+            localState.input = localState.input.slice(0, -1);
+            localState.progress = calculateCommandProgress(localState.input, command);
+            sendInput();
+            refreshUi();
+          }
+          return;
+        }
+
+        if (event.key.length !== 1 && event.key !== " ") {
+          return;
+        }
+
+        const expectedChar = command[localState.input.length];
+        const typedChar = event.key === " " ? " " : event.key;
+
+        if (!expectedChar) {
+          return;
+        }
+
+        if (typedChar.toLowerCase() !== expectedChar.toLowerCase()) {
+          return;
+        }
+
+        localState.input += expectedChar;
+        localState.progress = calculateCommandProgress(localState.input, command);
+        localState.awaitingRoundAck = localState.input.length === command.length;
+        sendInput();
+        refreshUi();
+
+        if (localState.awaitingRoundAck) {
+          setNotice("payload enviado. aguardando confirmacao do servidor...", "info");
+        }
+      }
+
+      function handleKeyUp(event) {
+        const normalizedKey = normalizePhysicalKey(event.key);
+        if (!normalizedKey) {
+          return;
+        }
+
+        delete activeKeys[normalizedKey];
+        refreshKeyboard();
+      }
+
+      function normalizePhysicalKey(value) {
+        const key = String(value || "").toLowerCase();
+
+        if (key === " ") {
+          return "space";
+        }
+
+        if (key === "capslock") {
+          return "caps";
+        }
+
+        if (key === "control") {
+          return "ctrl";
+        }
+
+        if (key === "altgraph") {
+          return "alt";
+        }
+
+        if (key === "meta") {
+          return "win";
+        }
+
+        return key;
+      }
+
+      function keyNameToDataset(label) {
+        const lower = label.toLowerCase();
+        if (lower === "space") {
+          return "space";
+        }
+        if (lower === "caps") {
+          return "caps";
+        }
+        return lower;
+      }
+
+      function sendInput() {
+        if (!isSocketOpen()) {
+          return;
+        }
+
+        ws.send(JSON.stringify({
+          type: "game_input",
+          gameId: gameData.gameId,
+          input: localState.input
+        }));
+      }
+
+      function refreshKeyboard() {
+        const keys = elements.keyboardLeft.querySelectorAll(".key");
+        keys.forEach(function(keyElement) {
+          const keyName = keyElement.dataset.key;
+          keyElement.classList.toggle("active", Boolean(activeKeys[keyName]));
+        });
+      }
+
+      function resizeCanvases() {
+        resizeCanvas(elements.canvasLeft);
+        resizeCanvas(elements.canvasRight);
+      }
+
+      function resizeCanvas(canvas) {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = Math.max(1, Math.floor(rect.width));
+        canvas.height = Math.max(1, Math.floor(rect.height));
+      }
+
+      function gameLoop(timestamp) {
+        if (!lastFrameTime) {
+          lastFrameTime = timestamp;
+        }
+
+        const delta = (timestamp - lastFrameTime) / 1000;
+        lastFrameTime = timestamp;
+        ticker += delta;
+
+        renderTerminal(elements.canvasLeft, localState, true);
+        renderTerminal(elements.canvasRight, remoteState, false);
+
+        if (gameStarted && !gameOver) {
+          updateTimer();
+        }
+
+        if (confettiParticles.length) {
+          updateConfetti();
+        }
+
+        requestAnimationFrame(gameLoop);
+      }
+
+      function renderTerminal(canvas, state, isLocal) {
+        const ctx = canvas.getContext("2d");
+        const width = canvas.width;
+        const height = canvas.height;
+        const command = getCurrentCommand(state);
+        const input = state.input || "";
+        const cellSize = Math.min(width / 16, height / 9);
+        const cols = Math.floor(width / cellSize);
+        const rows = Math.floor(height / cellSize);
+
+        ctx.clearRect(0, 0, width, height);
+        ctx.strokeStyle = "#333333";
+        ctx.lineWidth = 1;
+
+        for (let x = 0; x <= cols; x += 1) {
+          ctx.beginPath();
+          ctx.moveTo(x * cellSize, 0);
+          ctx.lineTo(x * cellSize, height);
+          ctx.stroke();
+        }
+
+        for (let y = 0; y <= rows; y += 1) {
+          ctx.beginPath();
+          ctx.moveTo(0, y * cellSize);
+          ctx.lineTo(width, y * cellSize);
+          ctx.stroke();
+        }
+
+        if (!isLocal) {
+          return;
+        }
+
+        if (!command) {
+          ctx.textAlign = "center";
+          ctx.fillStyle = state.completedRounds >= totalRounds ? "#33ff33" : "#666666";
+          ctx.font = "28px Departure Mono, monospace";
+          ctx.fillText(state.completedRounds >= totalRounds ? "SISTEMA HACKEADO!" : "WAITING...", width / 2, height / 2);
+          return;
+        }
+
+        const fontSize = Math.max(14, cellSize * 0.7);
+        const baseline = height / 2 + 20;
+        const startX = 20;
+
+        ctx.textAlign = "left";
+        ctx.font = fontSize + "px Departure Mono, monospace";
+
+        for (let index = 0; index < command.length; index += 1) {
+          if (index < input.length) {
+            ctx.fillStyle = "#33ff33";
+          } else if (isLocal && index === input.length && !state.awaitingRoundAck) {
+            ctx.fillStyle = "#ffffff";
+          } else {
+            ctx.fillStyle = "#666666";
+          }
+
+          ctx.fillText(command[index], startX + index * fontSize * 0.55, baseline);
+        }
+
+        if (isLocal && !state.awaitingRoundAck && Math.floor(ticker * 3) % 2 === 0) {
+          ctx.fillStyle = "#ffa133";
+          ctx.fillRect(startX + input.length * fontSize * 0.55, baseline + 4, 2, fontSize - 8);
+        }
+
+        ctx.font = "10px Departure Mono, monospace";
+        ctx.fillStyle = "#666666";
+        ctx.textAlign = "left";
+        ctx.fillText("WORDS:" + state.completedRounds, 20, height - 25);
+        ctx.fillText("MODE:TYPING", 20, height - 10);
+
+        ctx.fillStyle = "#ffa133";
+        ctx.textAlign = "right";
+        ctx.fillText("> root@terminal", width - 20, height - 10);
+      }
+
+      function updateTimer() {
+        if (!startTimestamp) {
+          elements.timerValue.textContent = (roundTimeLimitMs / 1000).toFixed(1) + "s";
+          return;
+        }
+
+        const remainingMs = Math.max(0, roundTimeLimitMs - (Date.now() - startTimestamp));
+        elements.timerValue.textContent = (remainingMs / 1000).toFixed(1) + "s";
+
+        if (remainingMs <= 0 && !gameOver) {
+          setNotice("tempo esgotado. aguardando resolucao do servidor...", "warning");
+        }
+      }
+
+      function refreshUi() {
+        const localProgress = totalProgress(localState);
+        const remoteProgress = totalProgress(remoteState);
+        const myRoundDisplay = Math.min(localState.completedRounds + 1, totalRounds);
+        const oppRoundDisplay = Math.min(remoteState.completedRounds + 1, totalRounds);
+
+        elements.progressLeft.style.width = localProgress + "%";
+        elements.progressRight.style.width = remoteProgress + "%";
+        elements.myProgressText.textContent = localProgress.toFixed(0);
+        elements.oppProgressText.textContent = remoteProgress.toFixed(0);
+        elements.myRoundValue.textContent = myRoundDisplay + " / " + totalRounds;
+        elements.oppRoundValue.textContent = oppRoundDisplay + " / " + totalRounds;
+        elements.telemetryRound.textContent = oppRoundDisplay + " / " + totalRounds;
+        elements.telemetryInput.textContent = String(remoteState.input.length);
+        elements.telemetryProgress.textContent = (remoteState.progress || 0).toFixed(0) + "%";
+
+        elements.myStateText.textContent = localState.awaitingRoundAck
+          ? "aguardando ack"
+          : gameStarted
+            ? "digitando"
+            : "preparando";
+
+        elements.oppStateText.textContent = remoteState.disconnected
+          ? "offline"
+          : remoteState.input.length > 0
+            ? "digitando"
+            : "aguardando";
+
+        elements.telemetryStatus.textContent = remoteState.disconnected
+          ? "offline"
+          : remoteState.input.length > 0
+            ? "ativo"
+            : "stand-by";
+      }
+
+      function totalProgress(state) {
+        const command = getCurrentCommand(state);
+        const fractional = command ? calculateCommandProgress(state.input, command) / 100 : 0;
+        const completed = Math.min(totalRounds, state.completedRounds + fractional);
+        return Math.min(100, (completed / totalRounds) * 100);
+      }
+
+      function calculateCommandProgress(input, command) {
+        if (!command) {
+          return 0;
+        }
+
+        return (input.length / command.length) * 100;
+      }
+
+      function getCurrentCommand(state) {
+        if (!commands.length || state.roundIndex >= commands.length) {
+          return "";
+        }
+
+        return commands[state.roundIndex];
+      }
+
+      function setNotice(text, tone) {
+        elements.statusBanner.textContent = text;
+        elements.statusBanner.dataset.tone = tone || "info";
+      }
+
+      function updateConnectionStatus(state) {
+        const label = {
+          connected: "online",
+          connecting: "conectando",
+          offline: "offline"
+        }[state];
+
+        elements.connectionPill.dataset.state = state;
+        elements.connectionStatus.textContent = label;
+        elements.hudConnectionValue.textContent = label;
+      }
+
+      function finalizeFromServer(message) {
+        const localRounds = gameData.playerIndex === 0 ? message.player0Rounds : message.player1Rounds;
+        const remoteRounds = gameData.playerIndex === 0 ? message.player1Rounds : message.player0Rounds;
+
+        if (typeof localRounds === "number") {
+          localState.completedRounds = localRounds;
+          localState.roundIndex = localRounds;
+          localState.input = "";
+          localState.progress = 0;
+        }
+
+        if (typeof remoteRounds === "number") {
+          remoteState.completedRounds = remoteRounds;
+          remoteState.roundIndex = remoteRounds;
+          remoteState.input = "";
+          remoteState.progress = 0;
+        }
+
+        if (message.reason === "timeout_draw" || !message.winner) {
+          finalizeMatch("draw", "tempo encerrado com progresso empatado. sem ponto para os dois.", message.reason);
+          return;
+        }
+
+        const mode = message.winner === username ? "win" : "lose";
+        finalizeMatch(mode, resultCopy(mode, message.reason), message.reason);
+      }
+
+      function finalizeMatch(mode, message, reason) {
+        if (resultShown) {
+          return;
+        }
+
+        resultShown = true;
+        gameOver = true;
+        localState.awaitingRoundAck = false;
+        refreshUi();
+
+        elements.resultOverlay.classList.remove("hidden");
+        elements.resultMyScore.textContent = localState.completedRounds + " / " + totalRounds;
+        elements.resultOppScore.textContent = remoteState.completedRounds + " / " + totalRounds;
+        elements.resultSub.textContent = message;
+
+        if (mode === "win") {
+          elements.resultEyebrow.textContent = reason === "forfeit" ? "Forfeit confirmed" : "Match won";
+          elements.resultText.textContent = "sistema hackeado";
+          elements.resultText.style.color = "#7ffd9d";
+          launchConfetti();
+        } else if (mode === "lose") {
+          elements.resultEyebrow.textContent = "Match lost";
+          elements.resultText.textContent = "intrusao falhou";
+          elements.resultText.style.color = "#ff6f8f";
+        } else {
+          elements.resultEyebrow.textContent = "Draw";
+          elements.resultText.textContent = "timeout travado";
+          elements.resultText.style.color = "#ffaf45";
+        }
+      }
+
+      function resultCopy(mode, reason) {
+        if (reason === "forfeit") {
+          return mode === "win"
+            ? "o rival abandonou a sala. a vitoria conta no ranking."
+            : "sua conexao caiu e a partida foi encerrada por abandono.";
+        }
+
+        if (reason === "timeout") {
+          return mode === "win"
+            ? "o tempo acabou, mas seu progresso foi maior."
+            : "o tempo acabou e o rival terminou com mais progresso.";
+        }
+
+        if (reason === "finish") {
+          return mode === "win"
+            ? "voce fechou os cinco rounds primeiro e levou o ponto."
+            : "o rival concluiu os cinco rounds antes de voce.";
+        }
+
+        return messageFallback(mode);
+      }
+
+      function messageFallback(mode) {
+        if (mode === "win") {
+          return "partida concluida com sucesso.";
+        }
+
+        if (mode === "lose") {
+          return "o rival tomou a frente desta vez.";
+        }
+
+        return "a partida terminou empatada.";
+      }
+
+      function launchConfetti() {
+        const canvas = elements.confettiCanvas;
+        const ctx = canvas.getContext("2d");
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        const colors = ["#ffaf45", "#7ffd9d", "#4fd8c6", "#f3f1ea", "#ff6f8f"];
+
+        canvas.width = width;
+        canvas.height = height;
+        canvas.classList.add("active");
+
+        confettiParticles = Array.from({ length: 90 }).map(function(_, index) {
+          return {
+            x: Math.random() * width,
+            y: -20 - index * 6,
+            size: 6 + Math.random() * 6,
+            speedY: 2 + Math.random() * 4,
+            speedX: -2 + Math.random() * 4,
+            rotation: Math.random() * Math.PI,
+            rotationSpeed: -0.16 + Math.random() * 0.32,
+            color: colors[index % colors.length]
+          };
+        });
+
+        if (confettiFrame) {
+          cancelAnimationFrame(confettiFrame);
+        }
+
+        function draw() {
+          ctx.clearRect(0, 0, width, height);
+
+          confettiParticles.forEach(function(particle) {
+            particle.x += particle.speedX;
+            particle.y += particle.speedY;
+            particle.rotation += particle.rotationSpeed;
+
+            ctx.save();
+            ctx.translate(particle.x, particle.y);
+            ctx.rotate(particle.rotation);
+            ctx.fillStyle = particle.color;
+            ctx.fillRect(-particle.size / 2, -particle.size / 2, particle.size, particle.size * 0.6);
+            ctx.restore();
+          });
+
+          confettiParticles = confettiParticles.filter(function(particle) {
+            return particle.y < height + 40;
+          });
+
+          if (confettiParticles.length) {
+            confettiFrame = requestAnimationFrame(draw);
+          } else {
+            confettiFrame = null;
+            canvas.classList.remove("active");
+          }
+        }
+
+        confettiFrame = requestAnimationFrame(draw);
+      }
+
+      function updateConfetti() {
+        if (!confettiParticles.length && elements.confettiCanvas.classList.contains("active") && !confettiFrame) {
+          elements.confettiCanvas.classList.remove("active");
+        }
+      }
+
+      function isSocketOpen() {
+        return ws && ws.readyState === WebSocket.OPEN;
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>
