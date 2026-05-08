@@ -167,8 +167,8 @@
       let clientId = "";
       let opponentName = "";
       let commands = [];
-      let totalRounds = 5;
-      let roundTimeLimitMs = 30000;
+      let totalRounds = 10;
+      let roundTimeLimitMs = 60000;
       let startTimestamp = null;
       let gameStarted = false;
       let gameOver = false;
@@ -177,10 +177,28 @@
       let ticker = 0;
       let confettiFrame = null;
       let confettiParticles = [];
+      let audioContext = null;
+      let audioMaster = null;
+      let audioUnlocked = false;
+      const effectState = {
+        local: createEffectState(),
+        remote: createEffectState()
+      };
 
       const activeKeys = {};
       const localState = createPlayerState();
       const remoteState = createPlayerState();
+
+      function createEffectState() {
+        return {
+          particles: [],
+          floatingTexts: [],
+          flashes: [],
+          glitches: [],
+          shake: 0,
+          corrupt: 0
+        };
+      }
 
       function createPlayerState() {
         return {
@@ -205,8 +223,8 @@
         clientId = gameData.clientId;
         opponentName = gameData.opponent || "OPPONENT";
         commands = Array.isArray(gameData.commands) ? gameData.commands : [];
-        totalRounds = gameData.totalRounds || commands.length || 5;
-        roundTimeLimitMs = gameData.roundTimeLimitMs || 30000;
+        totalRounds = gameData.totalRounds || commands.length || 10;
+        roundTimeLimitMs = gameData.roundTimeLimitMs || 60000;
 
         bindUi();
         createKeyboard();
@@ -221,8 +239,10 @@
         window.addEventListener("resize", resizeCanvases);
         window.addEventListener("keydown", handleKeyDown);
         window.addEventListener("keyup", handleKeyUp);
+        window.addEventListener("pointerdown", unlockAudio, { once: true });
 
         elements.playAgainBtn.addEventListener("click", function() {
+          playUiSound();
           localStorage.setItem(STORAGE.username, username);
           sessionStorage.setItem(STORAGE.queueAgain, "1");
           sessionStorage.removeItem("gameData");
@@ -230,6 +250,7 @@
         });
 
         elements.homeBtn.addEventListener("click", function() {
+          playUiSound();
           localStorage.setItem(STORAGE.username, username);
           sessionStorage.removeItem(STORAGE.queueAgain);
           sessionStorage.removeItem("gameData");
@@ -435,6 +456,7 @@
 
       function applyProgress(message) {
         const targetState = message.playerIndex === gameData.playerIndex ? localState : remoteState;
+        const previousInputLength = targetState.input.length;
         targetState.input = message.input || "";
         targetState.progress = message.progress || 0;
 
@@ -449,6 +471,11 @@
         if (targetState === localState) {
           localState.awaitingRoundAck = localState.input.length > 0
             && localState.input.length === getCurrentCommand(localState).length;
+        } else if (targetState.input.length > previousInputLength) {
+          const command = getCurrentCommand(targetState);
+          const cursor = getCursorPoint(targetState, command, false);
+          spawnPixelBurst(effectState.remote, cursor.x, cursor.y, "#ffa133", 4);
+          spawnFlash(effectState.remote, "#ffa133", 0.1, 0.08);
         }
 
         refreshUi();
@@ -467,8 +494,10 @@
 
         if (targetState === localState) {
           localState.awaitingRoundAck = false;
+          spawnRoundClear(effectState.local, true);
           setNotice("round concluido. proximo payload carregado.", "success");
         } else {
+          spawnRoundClear(effectState.remote, false);
           setNotice("o rival concluiu um round. acelere.", "warning");
         }
 
@@ -482,10 +511,14 @@
         resizeCanvases();
         window.requestAnimationFrame(resizeCanvases);
         elements.readyStatus.textContent = "go";
+        spawnBoot(effectState.local);
+        spawnBoot(effectState.remote);
+        playBootSound();
         refreshUi();
       }
 
       function handleKeyDown(event) {
+        unlockAudio();
         const normalizedKey = normalizePhysicalKey(event.key);
         if (normalizedKey) {
           activeKeys[normalizedKey] = true;
@@ -515,6 +548,7 @@
           if (localState.input.length > 0) {
             localState.input = localState.input.slice(0, -1);
             localState.progress = calculateCommandProgress(localState.input, command);
+            spawnDeleteEffect(effectState.local);
             sendInput();
             refreshUi();
           }
@@ -533,12 +567,14 @@
         }
 
         if (typedChar.toLowerCase() !== expectedChar.toLowerCase()) {
+          spawnMiss(effectState.local);
           return;
         }
 
         localState.input += expectedChar;
         localState.progress = calculateCommandProgress(localState.input, command);
         localState.awaitingRoundAck = localState.input.length === command.length;
+        spawnCorrectKey(effectState.local, localState, command);
         sendInput();
         refreshUi();
 
@@ -633,9 +669,11 @@
         const delta = (timestamp - lastFrameTime) / 1000;
         lastFrameTime = timestamp;
         ticker += delta;
+        updateEffects(effectState.local, delta);
+        updateEffects(effectState.remote, delta);
 
-        renderTerminal(elements.canvasLeft, localState, true);
-        renderTerminal(elements.canvasRight, remoteState, false);
+        renderTerminal(elements.canvasLeft, localState, true, effectState.local);
+        renderTerminal(elements.canvasRight, remoteState, false, effectState.remote);
 
         if (gameStarted && !gameOver) {
           updateTimer();
@@ -648,7 +686,7 @@
         requestAnimationFrame(gameLoop);
       }
 
-      function renderTerminal(canvas, state, isLocal) {
+      function renderTerminal(canvas, state, isLocal, effects) {
         const ctx = canvas.getContext("2d");
         const width = canvas.width;
         const height = canvas.height;
@@ -657,8 +695,12 @@
         const cellSize = Math.min(width / 16, height / 9);
         const cols = Math.floor(width / cellSize);
         const rows = Math.floor(height / cellSize);
+        const shakeX = effects.shake > 0 ? (Math.random() - 0.5) * effects.shake * 10 : 0;
+        const shakeY = effects.shake > 0 ? (Math.random() - 0.5) * effects.shake * 8 : 0;
 
         ctx.clearRect(0, 0, width, height);
+        ctx.save();
+        ctx.translate(Math.round(shakeX), Math.round(shakeY));
         ctx.strokeStyle = "#333333";
         ctx.lineWidth = 1;
 
@@ -676,15 +718,13 @@
           ctx.stroke();
         }
 
-        if (!isLocal) {
-          return;
-        }
-
         if (!command) {
           ctx.textAlign = "center";
           ctx.fillStyle = state.completedRounds >= totalRounds ? "#33ff33" : "#666666";
           ctx.font = "28px Departure Mono, monospace";
           ctx.fillText(state.completedRounds >= totalRounds ? "SISTEMA HACKEADO!" : "WAITING...", width / 2, height / 2);
+          drawTerminalEffects(ctx, width, height, effects);
+          ctx.restore();
           return;
         }
 
@@ -698,7 +738,7 @@
         for (let index = 0; index < command.length; index += 1) {
           if (index < input.length) {
             ctx.fillStyle = "#33ff33";
-          } else if (isLocal && index === input.length && !state.awaitingRoundAck) {
+          } else if (index === input.length && (isLocal ? !state.awaitingRoundAck : input.length > 0)) {
             ctx.fillStyle = "#ffffff";
           } else {
             ctx.fillStyle = "#666666";
@@ -707,7 +747,7 @@
           ctx.fillText(command[index], startX + index * fontSize * 0.55, baseline);
         }
 
-        if (isLocal && !state.awaitingRoundAck && Math.floor(ticker * 3) % 2 === 0) {
+        if ((isLocal ? !state.awaitingRoundAck : input.length > 0) && Math.floor(ticker * 3) % 2 === 0) {
           ctx.fillStyle = "#ffa133";
           ctx.fillRect(startX + input.length * fontSize * 0.55, baseline + 4, 2, fontSize - 8);
         }
@@ -716,11 +756,13 @@
         ctx.fillStyle = "#666666";
         ctx.textAlign = "left";
         ctx.fillText("WORDS:" + state.completedRounds, 20, height - 25);
-        ctx.fillText("MODE:TYPING", 20, height - 10);
+        ctx.fillText("MODE:" + (isLocal ? "TYPING" : "REMOTE"), 20, height - 10);
 
         ctx.fillStyle = "#ffa133";
         ctx.textAlign = "right";
-        ctx.fillText("> root@terminal", width - 20, height - 10);
+        ctx.fillText(isLocal ? "> root@terminal" : "> remote@terminal", width - 20, height - 10);
+        drawTerminalEffects(ctx, width, height, effects);
+        ctx.restore();
       }
 
       function updateTimer() {
@@ -735,6 +777,394 @@
         if (remainingMs <= 0 && !gameOver) {
           setNotice("tempo esgotado. aguardando resolucao do servidor...", "warning");
         }
+      }
+
+      function updateEffects(effects, delta) {
+        effects.shake = Math.max(0, effects.shake - delta * 4.8);
+        effects.corrupt = Math.max(0, effects.corrupt - delta * 1.8);
+
+        effects.particles = effects.particles.filter(function(particle) {
+          particle.life -= delta;
+          particle.x += particle.vx * delta;
+          particle.y += particle.vy * delta;
+          particle.vy += 70 * delta;
+          return particle.life > 0;
+        });
+
+        effects.floatingTexts = effects.floatingTexts.filter(function(text) {
+          text.life -= delta;
+          text.y -= text.speed * delta;
+          return text.life > 0;
+        });
+
+        effects.flashes = effects.flashes.filter(function(flash) {
+          flash.life -= delta;
+          return flash.life > 0;
+        });
+
+        effects.glitches = effects.glitches.filter(function(slice) {
+          slice.life -= delta;
+          slice.x += slice.vx * delta;
+          return slice.life > 0;
+        });
+      }
+
+      function drawTerminalEffects(ctx, width, height, effects) {
+        drawFlashes(ctx, width, height, effects);
+        drawGlitches(ctx, width, height, effects);
+        drawParticles(ctx, effects);
+        drawFloatingTexts(ctx, effects);
+
+        if (effects.corrupt > 0) {
+          ctx.fillStyle = "rgba(255, 51, 51, " + (0.12 * effects.corrupt).toFixed(3) + ")";
+          for (let y = 0; y < height; y += 14) {
+            if ((y / 14) % 2 === 0) {
+              ctx.fillRect(0, y, width, 3);
+            }
+          }
+        }
+      }
+
+      function drawFlashes(ctx, width, height, effects) {
+        effects.flashes.forEach(function(flash) {
+          const alpha = Math.max(0, flash.life / flash.duration) * flash.alpha;
+          ctx.fillStyle = colorWithAlpha(flash.color, alpha);
+          ctx.fillRect(0, 0, width, height);
+        });
+      }
+
+      function drawGlitches(ctx, width, height, effects) {
+        effects.glitches.forEach(function(slice) {
+          const alpha = Math.max(0, slice.life / slice.duration);
+          ctx.fillStyle = colorWithAlpha(slice.color, alpha * 0.85);
+          ctx.fillRect(slice.x, slice.y, width * slice.width, slice.height);
+        });
+      }
+
+      function drawParticles(ctx, effects) {
+        effects.particles.forEach(function(particle) {
+          const alpha = Math.max(0, particle.life / particle.duration);
+          ctx.fillStyle = colorWithAlpha(particle.color, alpha);
+          ctx.fillRect(Math.round(particle.x), Math.round(particle.y), particle.size, particle.size);
+        });
+      }
+
+      function drawFloatingTexts(ctx, effects) {
+        effects.floatingTexts.forEach(function(text) {
+          const alpha = Math.max(0, text.life / text.duration);
+          ctx.font = "10px Departure Mono, monospace";
+          ctx.textAlign = "left";
+          ctx.fillStyle = colorWithAlpha(text.color, alpha);
+          ctx.fillText(text.value, text.x, text.y);
+        });
+      }
+
+      function spawnCorrectKey(effects, state, command) {
+        const point = getCursorPoint(state, command, true);
+        spawnPixelBurst(effects, point.x, point.y, "#33ff33", 5);
+        spawnFlash(effects, "#ffa133", 0.08, 0.08);
+        playCorrectSound(state.input.length);
+
+        if (state.input.length % 4 === 0) {
+          spawnFloatingText(effects, "+OK", point.x + 10, point.y - 12, "#ffa133", 0.32);
+        }
+      }
+
+      function spawnMiss(effects) {
+        effects.shake = Math.max(effects.shake, 1);
+        effects.corrupt = Math.max(effects.corrupt, 0.45);
+        spawnFlash(effects, "#ff3333", 0.2, 0.16);
+        spawnGlitch(effects, "#ff3333", 3);
+        spawnFloatingText(effects, "MISS", 28, 70, "#ff3333", 0.42);
+        playMissSound();
+      }
+
+      function spawnDeleteEffect(effects) {
+        effects.shake = Math.max(effects.shake, 0.32);
+        spawnGlitch(effects, "#ffa133", 1);
+        spawnFloatingText(effects, "DEL", 28, 84, "#ffa133", 0.28);
+        playDeleteSound();
+      }
+
+      function spawnRoundClear(effects, isLocal) {
+        effects.shake = Math.max(effects.shake, isLocal ? 0.75 : 0.45);
+        spawnFlash(effects, "#33ff33", 0.22, 0.18);
+        spawnGlitch(effects, "#33ff33", 4);
+        spawnFloatingText(effects, isLocal ? "ROUND CLEAR" : "REMOTE +1", 24, 58, "#33ff33", 0.7);
+        spawnPixelBurst(effects, 120, 90, "#33ff33", 18);
+        playRoundClearSound(isLocal);
+      }
+
+      function spawnBoot(effects) {
+        spawnFlash(effects, "#ffa133", 0.16, 0.2);
+        spawnGlitch(effects, "#ffa133", 5);
+        spawnFloatingText(effects, "READY", 24, 58, "#ffa133", 0.55);
+      }
+
+      function spawnFinalEffect(mode) {
+        playFinalSound(mode);
+
+        if (mode === "win") {
+          spawnRoundClear(effectState.local, true);
+          spawnFlash(effectState.remote, "#33ff33", 0.18, 0.28);
+          return;
+        }
+
+        if (mode === "lose") {
+          effectState.local.corrupt = 1;
+          effectState.local.shake = 1.3;
+          spawnFlash(effectState.local, "#ff3333", 0.22, 0.35);
+          spawnGlitch(effectState.local, "#ff3333", 8);
+          spawnFloatingText(effectState.local, "SYSTEM CORRUPTED", 24, 58, "#ff3333", 0.7);
+          return;
+        }
+
+        spawnFlash(effectState.local, "#ffa133", 0.18, 0.28);
+        spawnFlash(effectState.remote, "#ffa133", 0.18, 0.28);
+        spawnGlitch(effectState.local, "#ffa133", 4);
+        spawnGlitch(effectState.remote, "#ffa133", 4);
+      }
+
+      function unlockAudio() {
+        const context = getAudioContext();
+        if (!context) {
+          return;
+        }
+
+        if (context.state === "suspended") {
+          context.resume().catch(function() {});
+        }
+
+        audioUnlocked = true;
+      }
+
+      function getAudioContext() {
+        if (audioContext) {
+          return audioContext;
+        }
+
+        const AudioCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtor) {
+          return null;
+        }
+
+        audioContext = new AudioCtor();
+        audioMaster = audioContext.createGain();
+        audioMaster.gain.value = 0.18;
+        audioMaster.connect(audioContext.destination);
+        return audioContext;
+      }
+
+      function playTone(frequency, duration, options) {
+        const context = getAudioContext();
+        if (!context || !audioMaster) {
+          return;
+        }
+
+        const settings = options || {};
+        const start = context.currentTime + (settings.delay || 0);
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const volume = settings.volume || 0.28;
+
+        oscillator.type = settings.type || "square";
+        oscillator.frequency.setValueAtTime(frequency, start);
+
+        if (settings.endFrequency) {
+          oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, settings.endFrequency), start + duration);
+        }
+
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(volume, start + 0.008);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+        oscillator.connect(gain);
+        gain.connect(audioMaster);
+        oscillator.start(start);
+        oscillator.stop(start + duration + 0.02);
+      }
+
+      function playNoise(duration, options) {
+        const context = getAudioContext();
+        if (!context || !audioMaster) {
+          return;
+        }
+
+        const settings = options || {};
+        const start = context.currentTime + (settings.delay || 0);
+        const sampleRate = context.sampleRate;
+        const buffer = context.createBuffer(1, Math.max(1, Math.floor(sampleRate * duration)), sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let index = 0; index < data.length; index += 1) {
+          data[index] = (Math.random() * 2 - 1) * (1 - index / data.length);
+        }
+
+        const source = context.createBufferSource();
+        const filter = context.createBiquadFilter();
+        const gain = context.createGain();
+
+        filter.type = settings.filterType || "bandpass";
+        filter.frequency.setValueAtTime(settings.frequency || 900, start);
+        filter.Q.value = settings.q || 8;
+
+        gain.gain.setValueAtTime(settings.volume || 0.18, start);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+        source.buffer = buffer;
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioMaster);
+        source.start(start);
+      }
+
+      function playSequence(notes, baseDelay) {
+        notes.forEach(function(note, index) {
+          playTone(note[0], note[1], {
+            delay: (baseDelay || 0) + (note[2] || index * 0.055),
+            volume: note[3] || 0.22,
+            type: note[4] || "square",
+            endFrequency: note[5]
+          });
+        });
+      }
+
+      function playCorrectSound(step) {
+        const pitch = 420 + (step % 8) * 36;
+        playTone(pitch, 0.035, { volume: 0.16, type: "square", endFrequency: pitch * 1.22 });
+        playTone(pitch * 2, 0.028, { delay: 0.012, volume: 0.08, type: "triangle" });
+      }
+
+      function playMissSound() {
+        playTone(190, 0.11, { volume: 0.26, type: "sawtooth", endFrequency: 78 });
+        playNoise(0.09, { delay: 0.015, volume: 0.12, frequency: 520, q: 14 });
+      }
+
+      function playDeleteSound() {
+        playTone(320, 0.045, { volume: 0.11, type: "square", endFrequency: 210 });
+        playNoise(0.035, { delay: 0.02, volume: 0.07, frequency: 1200, q: 10 });
+      }
+
+      function playRoundClearSound(isLocal) {
+        const volume = isLocal ? 0.2 : 0.1;
+        playSequence([
+          [520, 0.06, 0, volume],
+          [660, 0.06, 0.06, volume],
+          [880, 0.11, 0.13, volume + 0.03]
+        ]);
+      }
+
+      function playBootSound() {
+        playSequence([
+          [180, 0.045, 0, 0.1],
+          [260, 0.045, 0.05, 0.12],
+          [390, 0.06, 0.11, 0.14],
+          [520, 0.08, 0.18, 0.16]
+        ]);
+      }
+
+      function playFinalSound(mode) {
+        if (mode === "win") {
+          playSequence([
+            [440, 0.08, 0, 0.22],
+            [660, 0.08, 0.08, 0.22],
+            [880, 0.1, 0.17, 0.25],
+            [1320, 0.18, 0.3, 0.2, "triangle"]
+          ]);
+          return;
+        }
+
+        if (mode === "lose") {
+          playTone(260, 0.18, { volume: 0.25, type: "sawtooth", endFrequency: 72 });
+          playNoise(0.22, { delay: 0.04, volume: 0.16, frequency: 360, q: 5 });
+          playTone(110, 0.2, { delay: 0.18, volume: 0.14, type: "square", endFrequency: 55 });
+          return;
+        }
+
+        playSequence([
+          [330, 0.08, 0, 0.16],
+          [330, 0.08, 0.12, 0.16],
+          [260, 0.12, 0.24, 0.13]
+        ]);
+      }
+
+      function playUiSound() {
+        unlockAudio();
+        playTone(520, 0.045, { volume: 0.11, type: "square", endFrequency: 660 });
+      }
+
+      function spawnPixelBurst(effects, x, y, color, count) {
+        for (let index = 0; index < count; index += 1) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 45 + Math.random() * 120;
+          effects.particles.push({
+            x,
+            y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: 2 + Math.floor(Math.random() * 4),
+            color,
+            life: 0.18 + Math.random() * 0.28,
+            duration: 0.46
+          });
+        }
+      }
+
+      function spawnFloatingText(effects, value, x, y, color, duration) {
+        effects.floatingTexts.push({
+          value,
+          x,
+          y,
+          color,
+          life: duration,
+          duration,
+          speed: 16 + Math.random() * 12
+        });
+      }
+
+      function spawnFlash(effects, color, alpha, duration) {
+        effects.flashes.push({
+          color,
+          alpha,
+          life: duration,
+          duration
+        });
+      }
+
+      function spawnGlitch(effects, color, count) {
+        for (let index = 0; index < count; index += 1) {
+          const duration = 0.08 + Math.random() * 0.2;
+          effects.glitches.push({
+            x: -20 + Math.random() * 40,
+            y: 24 + Math.random() * 220,
+            vx: -55 + Math.random() * 110,
+            width: 0.4 + Math.random() * 0.9,
+            height: 2 + Math.floor(Math.random() * 8),
+            color,
+            life: duration,
+            duration
+          });
+        }
+      }
+
+      function getCursorPoint(state, command, isLocal) {
+        const canvas = isLocal ? elements.canvasLeft : elements.canvasRight;
+        const width = Math.max(1, canvas.width);
+        const height = Math.max(1, canvas.height);
+        const cellSize = Math.min(width / 16, height / 9);
+        const fontSize = Math.max(14, cellSize * 0.7);
+        return {
+          x: 20 + Math.min((state.input || "").length, (command || "").length) * fontSize * 0.55,
+          y: height / 2 + 20
+        };
+      }
+
+      function colorWithAlpha(color, alpha) {
+        const hex = color.replace("#", "");
+        const red = parseInt(hex.slice(0, 2), 16);
+        const green = parseInt(hex.slice(2, 4), 16);
+        const blue = parseInt(hex.slice(4, 6), 16);
+        return "rgba(" + red + "," + green + "," + blue + "," + Math.max(0, Math.min(1, alpha)) + ")";
       }
 
       function refreshUi() {
@@ -848,6 +1278,7 @@
         gameOver = true;
         localState.awaitingRoundAck = false;
         refreshUi();
+        spawnFinalEffect(mode);
 
         elements.resultOverlay.classList.remove("hidden");
         elements.resultMyScore.textContent = localState.completedRounds + " / " + totalRounds;
@@ -915,15 +1346,14 @@
         canvas.height = height;
         canvas.classList.add("active");
 
-        confettiParticles = Array.from({ length: 90 }).map(function(_, index) {
+        confettiParticles = Array.from({ length: 120 }).map(function(_, index) {
           return {
             x: Math.random() * width,
-            y: -20 - index * 6,
-            size: 6 + Math.random() * 6,
-            speedY: 2 + Math.random() * 4,
-            speedX: -2 + Math.random() * 4,
-            rotation: Math.random() * Math.PI,
-            rotationSpeed: -0.16 + Math.random() * 0.32,
+            y: -20 - index * 5,
+            size: 4 + Math.floor(Math.random() * 9),
+            speedY: 2 + Math.random() * 5,
+            speedX: -3 + Math.random() * 6,
+            flicker: Math.random() > 0.5,
             color: colors[index % colors.length]
           };
         });
@@ -938,14 +1368,13 @@
           confettiParticles.forEach(function(particle) {
             particle.x += particle.speedX;
             particle.y += particle.speedY;
-            particle.rotation += particle.rotationSpeed;
 
-            ctx.save();
-            ctx.translate(particle.x, particle.y);
-            ctx.rotate(particle.rotation);
+            if (particle.flicker && Math.floor(particle.y / 12) % 2 === 0) {
+              return;
+            }
+
             ctx.fillStyle = particle.color;
-            ctx.fillRect(-particle.size / 2, -particle.size / 2, particle.size, particle.size * 0.6);
-            ctx.restore();
+            ctx.fillRect(Math.round(particle.x), Math.round(particle.y), particle.size, particle.size);
           });
 
           confettiParticles = confettiParticles.filter(function(particle) {

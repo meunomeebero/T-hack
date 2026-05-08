@@ -433,16 +433,162 @@ a:hover {
   list-style: none;
 }
 
+/* Ads columns */
+.ads-column {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 256px;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px 16px;
+  background: transparent;
+  z-index: 100;
+  scrollbar-width: none;
+}
+
+.ads-column::-webkit-scrollbar {
+  display: none;
+}
+
+.ads-left {
+  left: 0;
+  border-right: 1px solid #333333;
+}
+
+.ads-right {
+  right: 0;
+  border-left: 1px solid #333333;
+}
+
+.ad-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 166px;
+  padding: 18px 16px;
+  background: #252525;
+  border: 1px solid #444444;
+  color: var(--cement);
+  text-align: center;
+  text-decoration: none;
+  overflow: hidden;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
+}
+
+.ad-card:hover {
+  border-color: var(--amber);
+  background: #2b2b2b;
+  transform: translateY(-2px);
+}
+
+.ads-left .ad-card:nth-child(1) {
+  background: #2a2424;
+  border-color: #5f4141;
+}
+
+.ads-right .ad-card:nth-child(1) {
+  background: #24272a;
+  border-color: #414b5f;
+}
+
+.ads-column .ad-card:nth-child(3) {
+  background: #232923;
+  border-color: #3f573f;
+}
+
+.ad-placeholder {
+  min-height: 88px;
+  justify-content: center;
+  background: transparent;
+  border-style: dashed;
+  border-color: #3b3b3b;
+  color: var(--mud);
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.ad-placeholder:hover {
+  border-color: var(--flux);
+  color: var(--cement);
+  opacity: 1;
+}
+
+.ad-favicon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin-bottom: 12px;
+  image-rendering: pixelated;
+}
+
+.ad-card .ad-company {
+  position: relative;
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--enamel);
+  text-transform: uppercase;
+  letter-spacing: 0;
+  margin-bottom: 16px;
+}
+
+.ad-card .ad-headline {
+  max-width: 190px;
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--amber);
+  margin-bottom: 12px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.ad-card .ad-body {
+  max-width: 190px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--enamel);
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.ad-card .ad-cta {
+  margin-top: 16px;
+  font-size: 9px;
+  color: var(--amber);
+  text-transform: uppercase;
+}
+
+.ad-placeholder .ad-company {
+  display: none;
+}
+
+.ad-placeholder .ad-headline {
+  margin-bottom: 10px;
+  color: var(--amber);
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.ad-placeholder .ad-body {
+  color: var(--mud);
+}
+
 /* Home polish: simple terminal surface matching the game screen. */
 .home-body {
   min-height: 100vh;
   background: var(--carbon);
   color: var(--cement);
   overflow-x: hidden;
+  padding-left: 288px;
+  padding-right: 288px;
 }
 
 .home-shell {
-  width: min(920px, calc(100vw - 22px));
+  width: min(920px, calc(100vw - 576px));
   min-height: 100vh;
   padding: 11px;
   gap: 11px;
@@ -471,8 +617,8 @@ a:hover {
   gap: 14px;
   max-width: 100%;
   color: var(--mud);
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 13px;
+  line-height: 17px;
 }
 
 .home-body .hero-grid {
@@ -510,12 +656,21 @@ a:hover {
 
 .home-body .connection-pill,
 .home-body .info-chip {
-  min-height: 24px;
-  padding: 4px 7px;
+  min-height: 28px;
+  padding: 6px 9px;
   background: var(--carbon);
   color: var(--mud);
   border: 1px solid var(--smoke);
+  font-size: 13px;
+  line-height: 17px;
   white-space: nowrap;
+}
+
+.home-body .eyebrow,
+.home-body .field-label,
+.home-body .leader-highlight .label {
+  font-size: 13px;
+  line-height: 17px;
 }
 
 .home-body .pill-row {
@@ -528,23 +683,32 @@ a:hover {
 
 .home-body .text-input {
   border-color: var(--smoke);
-  height: 34px;
+  height: 38px;
+  font-size: 14px;
+  line-height: 19px;
 }
 
 .home-body .action-button {
   width: 100%;
-  min-height: 34px;
+  min-height: 38px;
+  font-size: 14px;
+  line-height: 19px;
 }
 
 .home-body .status-copy {
   padding: 8px 0;
   border-top: 1px solid #333333;
   border-bottom: 1px solid #333333;
+  color: var(--cement);
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .home-body .micro-copy {
-  color: var(--mud);
-  gap: 4px;
+  color: var(--cement);
+  font-size: 13px;
+  line-height: 18px;
+  gap: 5px;
 }
 
 .terminal-preview {
@@ -575,7 +739,8 @@ a:hover {
   display: flex;
   justify-content: space-between;
   color: var(--mud);
-  font-size: 9px;
+  font-size: 12px;
+  line-height: 16px;
   z-index: 1;
 }
 
@@ -617,18 +782,30 @@ a:hover {
   color: var(--amber);
 }
 
+.home-body .leader-highlight .score small {
+  font-size: 12px;
+}
+
 .home-body .leaderboard-list {
   min-width: 0;
   gap: 0;
   border: 2px solid #333333;
 }
 
+.home-body .placeholder-card {
+  color: var(--cement);
+  font-size: 14px;
+  line-height: 20px;
+}
+
 .home-body .leader-item {
   min-width: 0;
   grid-template-columns: 56px 1fr 82px;
-  padding: 8px 11px;
+  padding: 10px 11px;
   border: 0;
   border-bottom: 1px solid #333333;
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .home-body .leader-item:last-child {
@@ -637,6 +814,7 @@ a:hover {
 
 .home-body .leader-rank {
   color: var(--mud);
+  font-size: 14px;
 }
 
 .home-body .leader-meta span {
@@ -648,12 +826,16 @@ a:hover {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .home-body .leader-score {
   color: var(--amber);
   text-align: right;
   overflow: hidden;
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .game-shell {
@@ -1036,6 +1218,21 @@ a:hover {
 
   .hud-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1450px) {
+  .ads-column {
+    display: none;
+  }
+
+  .home-body {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .home-shell {
+    width: min(920px, 100%);
   }
 }
 

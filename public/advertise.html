@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anuncie // TERMINAL HACK</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .advertise-body {
+      min-height: 100vh;
+      background: var(--carbon);
+      color: var(--cement);
+      overflow-x: hidden;
+    }
+
+    .advertise-page {
+      width: min(760px, 100%);
+      margin: 0 auto;
+      padding: 44px 22px 66px;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--cement);
+      font-size: 13px;
+      line-height: 18px;
+      text-decoration: none;
+      margin-bottom: 33px;
+      transition: color 0.15s;
+    }
+
+    .back-link:hover {
+      color: var(--amber);
+    }
+
+    .advertise-header {
+      margin-bottom: 44px;
+    }
+
+    .advertise-header h1 {
+      font-size: 44px;
+      letter-spacing: -4px;
+      margin-bottom: 14px;
+    }
+
+    .advertise-header p {
+      max-width: 680px;
+      color: var(--enamel);
+      font-size: 16px;
+      font-weight: 500;
+      line-height: 24px;
+    }
+
+    .advertise-card {
+      background: var(--carbon);
+      border: 2px solid var(--clay);
+      padding: 34px;
+      margin-bottom: 22px;
+    }
+
+    .advertise-card h3 {
+      font-size: 14px;
+      color: var(--amber);
+      margin-bottom: 24px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .email-info {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .email-info a {
+      color: var(--amber);
+      font-size: 24px;
+      line-height: 30px;
+      text-decoration: none;
+      word-break: break-all;
+    }
+
+    .email-info a:hover {
+      text-decoration: underline;
+    }
+
+    .info-list {
+      list-style: none;
+      margin-top: 28px;
+      padding-top: 24px;
+      border-top: 1px solid var(--soot);
+    }
+
+    .info-list li {
+      color: var(--enamel);
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 22px;
+      padding: 9px 0;
+      padding-left: 24px;
+      position: relative;
+    }
+
+    .info-list li::before {
+      content: ">";
+      position: absolute;
+      left: 0;
+      color: var(--mud);
+    }
+
+    .email-badge {
+      display: inline-block;
+      background: var(--amber);
+      color: var(--carbon);
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-bottom: 11px;
+    }
+
+    @media (max-width: 767px) {
+      .advertise-page {
+        padding: 22px 11px 44px;
+      }
+
+      .advertise-header h1 {
+        font-size: 34px;
+        letter-spacing: -3px;
+      }
+
+      .advertise-card {
+        padding: 22px;
+      }
+
+      .email-info a {
+        font-size: 20px;
+        line-height: 26px;
+      }
+    }
+  </style>
+</head>
+<body class="advertise-body">
+  <main class="advertise-page">
+    <a href="/" class="back-link">
+      <span>&lt;</span> voltar para home
+    </a>
+
+    <div class="advertise-header">
+      <h1>ANUNCIE SEU PRODUTO</h1>
+      <p>
+        Alcance milhares de jogadores diariamente. Seu produto merece estar na tela de todos os hackers da arena.
+      </p>
+    </div>
+
+    <div class="advertise-card">
+      <h3>> Contato comercial</h3>
+      <div class="email-info">
+        <span class="email-badge">Email comercial</span>
+        <a href="mailto:mail@bero.land">mail@bero.land</a>
+      </div>
+      <ul class="info-list">
+        <li>Informe o site do seu projeto</li>
+        <li>Descreva o propósito do seu produto</li>
+        <li>Informe por quanto tempo deseja que os anúncios sejam exibidos</li>
+        <li>Sua resposta será enviada em alguns minutos após análise</li>
+      </ul>
+    </div>
+
+    <div class="advertise-card">
+      <h3>> Formato dos anuncios</h3>
+      <ul class="info-list">
+        <li>Cards quadrados nas laterais da tela</li>
+        <li>4 slots do lado esquerdo</li>
+        <li>4 slots do lado direito</li>
+        <li>Cabeçalho + descrição + link</li>
+        <li>Exibição em todas as páginas do site</li>
+      </ul>
+    </div>
+  </main>
+</body>
+</html>

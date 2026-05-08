@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="home-body">
+  <aside class="ads-column ads-left" id="ads-left"></aside>
+
   <main class="home-shell">
     <header class="home-header">
       <div>
@@ -14,8 +16,8 @@
         <h1 class="section-title">Terminal Hack</h1>
       </div>
       <div class="home-meta">
-        <span>ROUNDS: 05</span>
-        <span>TIME: 30S</span>
+        <span>ROUNDS: 10</span>
+        <span>TIME: 60S</span>
         <span>MODE: 1V1</span>
       </div>
     </header>
@@ -101,11 +103,15 @@
     </section>
   </main>
 
+  <aside class="ads-column ads-right" id="ads-right"></aside>
+
   <script>
     (function() {
       const WS_URL = window.location.protocol === "https:"
         ? "wss://" + window.location.host
         : "ws://" + window.location.host;
+
+      const API_URL = window.location.protocol + "//" + window.location.host;
 
       const STORAGE = {
         username: "terminalHackUsername",
@@ -127,7 +133,9 @@
         rankingList: document.getElementById("ranking-list"),
         leaderHighlight: document.getElementById("leader-highlight"),
         connectionPill: document.getElementById("connection-pill"),
-        connectionStatus: document.getElementById("connection-status")
+        connectionStatus: document.getElementById("connection-status"),
+        adsLeft: document.getElementById("ads-left"),
+        adsRight: document.getElementById("ads-right")
       };
 
       function init() {
@@ -138,6 +146,7 @@
         bindEvents();
         updateSearchButton();
         connect();
+        loadAds();
       }
 
       function bindEvents() {
@@ -229,6 +238,54 @@
         ws.send(JSON.stringify({ type: "get_rankings" }));
       }
 
+      function loadAds() {
+        fetch(API_URL + "/api/ads")
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            renderAds(data.left, elements.adsLeft);
+            renderAds(data.right, elements.adsRight);
+          })
+          .catch(function(err) {
+            console.log("Failed to load ads:", err);
+          });
+      }
+
+      function renderAds(ads, container) {
+        if (!ads || !ads.length) {
+          container.innerHTML = "";
+          return;
+        }
+
+        container.innerHTML = ads.map(function(ad) {
+          const faviconUrl = getFaviconUrl(ad.link);
+
+          if (!ad.is_active) {
+            return '<a href="/advertise.html" class="ad-card ad-placeholder">' +
+                   '<div class="ad-company"></div>' +
+                   '<div class="ad-headline">' + escapeHtml(ad.headline || "") + '</div>' +
+                   '<div class="ad-body">Clique para anunciar</div>' +
+                   '</a>';
+          }
+
+          return '<a href="' + escapeHtml(ad.link || "#") + '" target="_blank" rel="noopener" class="ad-card">' +
+                 '<img class="ad-favicon" src="' + escapeHtml(faviconUrl) + '" alt="" loading="lazy">' +
+                 '<div class="ad-company">' + escapeHtml(ad.company || "") + '</div>' +
+                 '<div class="ad-headline">' + escapeHtml(ad.headline || "") + '</div>' +
+                 '<div class="ad-body">' + escapeHtml(ad.body || "") + '</div>' +
+                 '<div class="ad-cta">ver mais &gt;</div>' +
+                 '</a>';
+        }).join("");
+      }
+
+      function getFaviconUrl(link) {
+        try {
+          const url = new URL(link, window.location.href);
+          return "https://www.google.com/s2/favicons?domain_url=" + encodeURIComponent(url.origin) + "&sz=64";
+        } catch (error) {
+          return "";
+        }
+      }
+
       function beginSearch() {
         username = sanitizeUsername(elements.usernameInput.value);
         elements.usernameInput.value = username;
@@ -305,8 +362,8 @@
               username: username,
               opponent: message.opponent,
               commands: Array.isArray(message.commands) ? message.commands : [],
-              totalRounds: message.totalRounds || 5,
-              roundTimeLimitMs: message.roundTimeLimitMs || 30000,
+              totalRounds: message.totalRounds || 10,
+              roundTimeLimitMs: message.roundTimeLimitMs || 60000,
               clientId: clientId
             }));
             window.location.href = "/game.html";
@@ -330,11 +387,11 @@
       function renderRankings(rankings) {
         if (!rankings.length) {
           elements.leaderHighlight.innerHTML = [
-            '<div class="label">Ainda sem lider</div>',
+            '<div class="label">Leaderboard vazio</div>',
             '<div class="name">seja o primeiro</div>',
             '<div class="score"><span>0</span><small>pts</small></div>'
           ].join("");
-          elements.rankingList.innerHTML = '<li class="placeholder-card">Nenhuma vitoria registrada ainda.</li>';
+          elements.rankingList.innerHTML = '<li class="placeholder-card">Sem jogadores no leaderboard.</li>';
           return;
         }
 
