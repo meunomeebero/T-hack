@@ -4,10 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TERMINAL HACK // ARCADE ONLINE</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="ui.css?v=3">
+  <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group identify setPersonProperties setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags resetGroups onFeatureFlags addFeatureFlagsHandler onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_j0R4f80F53ctkaYdSz9VEc0Vz1wFrs7V34jQszuSdN7', { api_host: 'https://analytics.bero.land', defaults: '2026-01-30' });
+    function track(event, props) { try { window.posthog && window.posthog.capture(event, props || {}); } catch (e) {} }
+  </script>
 </head>
 <body class="home-body">
-  <aside class="ads-column ads-left" id="ads-left"></aside>
+  <aside class="partners-rail partners-left" id="partners-left"></aside>
 
   <main class="home-shell">
     <header class="home-header">
@@ -42,7 +47,7 @@
               class="text-input"
               type="text"
               id="username-input"
-              maxlength="20"
+              maxlength="24"
               autocomplete="off"
               placeholder="digite seu alias..."
             >
@@ -55,26 +60,20 @@
 
         <div class="status-copy" id="status-area">Conecte-se e entre na fila quando quiser.</div>
 
-        <div class="micro-copy">
-          <p>░ SEM LOGIN. USERNAME DIRETO NA ARENA.</p>
-          <p>░ COMANDOS GERADOS E VALIDADOS NO SERVIDOR.</p>
-        </div>
+        <p class="online-indicator" id="online-indicator">
+          <span class="online-dot"></span>
+          <span><span id="online-count">--</span> ONLINE</span>
+        </p>
       </aside>
 
-      <section class="terminal-preview" aria-label="terminal preview">
+      <section class="terminal-preview" aria-label="partidas ao vivo">
         <div class="terminal-preview-header">
-          <span>LOCAL NODE</span>
-          <span>WAITING FOR MATCH...</span>
+          <span>LIVE MATCHES</span>
+          <span id="live-count">--</span>
         </div>
-        <pre>┌──────────────────────────────┐
-│ ACCESS VECTOR                │
-│                              │
-│ &gt; register username          │
-│ &gt; find_match                 │
-│ &gt; await opponent             │
-│                              │
-│ STATUS: READY                │
-└──────────────────────────────┘</pre>
+        <ul class="live-matches" id="live-matches">
+          <li class="live-empty">aguardando partidas...</li>
+        </ul>
       </section>
     </section>
 
@@ -103,7 +102,7 @@
     </section>
   </main>
 
-  <aside class="ads-column ads-right" id="ads-right"></aside>
+  <aside class="partners-rail partners-right" id="partners-right"></aside>
 
   <script>
     (function() {
@@ -123,6 +122,11 @@
       let isSearching = false;
       let pendingSearch = false;
       let username = localStorage.getItem(STORAGE.username) || "";
+      let registeredUsername = "";
+      let audioContext = null;
+      let audioMaster = null;
+      let queueMusicTimer = null;
+      let queueMusicStep = 0;
       const clientId = getOrCreateClientId();
 
       const elements = {
@@ -134,9 +138,14 @@
         leaderHighlight: document.getElementById("leader-highlight"),
         connectionPill: document.getElementById("connection-pill"),
         connectionStatus: document.getElementById("connection-status"),
-        adsLeft: document.getElementById("ads-left"),
-        adsRight: document.getElementById("ads-right")
+        adsLeft: document.getElementById("partners-left"),
+        adsRight: document.getElementById("partners-right"),
+        liveMatches: document.getElementById("live-matches"),
+        liveCount: document.getElementById("live-count"),
+        onlineCount: document.getElementById("online-count")
       };
+
+      let pollTimer = null;
 
       function init() {
         elements.usernameInput.value = username;
@@ -152,6 +161,7 @@
       function bindEvents() {
         elements.matchForm.addEventListener("submit", function(event) {
           event.preventDefault();
+          unlockAudio();
 
           if (isSearching) {
             cancelSearch();
@@ -190,19 +200,19 @@
           }
 
           fetchRankings();
-
-          if (pendingSearch && !isSearching && username) {
-            triggerSearch();
-          }
+          fetchLiveMatches();
+          startPolling();
         };
 
         ws.onclose = function() {
           updateConnectionStatus("offline");
+          stopPolling();
 
           if (isSearching) {
             pendingSearch = true;
             isSearching = false;
             updateSearchButton();
+            stopQueueMusic();
             showStatus("reconectando ao servidor para manter a fila...", "searching");
           }
 
@@ -238,8 +248,89 @@
         ws.send(JSON.stringify({ type: "get_rankings" }));
       }
 
+      function fetchLiveMatches() {
+        if (!isSocketOpen()) {
+          return;
+        }
+
+        ws.send(JSON.stringify({ type: "get_active_matches" }));
+      }
+
+      function startPolling() {
+        stopPolling();
+        pollTimer = window.setInterval(function() {
+          fetchRankings();
+          fetchLiveMatches();
+        }, 3000);
+      }
+
+      function stopPolling() {
+        if (pollTimer) {
+          window.clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }
+
+      function spectateMatch(gameId) {
+        if (!isSocketOpen() || !gameId) {
+          return;
+        }
+        track("spectate_clicked", { game_id: gameId });
+        ws.send(JSON.stringify({ type: "spectate_match", gameId: gameId }));
+      }
+
+      function renderLiveMatches(matches, waiting) {
+        const list = matches || [];
+        const queue = waiting || [];
+
+        if (list.length) {
+          elements.liveCount.textContent = list.length + " AO VIVO";
+        } else if (queue.length) {
+          elements.liveCount.textContent = queue.length + " NA FILA";
+        } else {
+          elements.liveCount.textContent = "OCIOSO";
+        }
+
+        if (list.length) {
+          elements.liveMatches.innerHTML = list.map(function(m) {
+            const score = (m.player0Rounds || 0) + ":" + (m.player1Rounds || 0);
+            return '<li class="live-match-row">' +
+                   '<div class="live-vs">' +
+                     '<span class="live-player">' + escapeHtml(m.player0 || "?") + '</span>' +
+                     '<span class="live-x">x</span>' +
+                     '<span class="live-player">' + escapeHtml(m.player1 || "?") + '</span>' +
+                   '</div>' +
+                   '<div class="live-meta">' +
+                     '<span class="live-score">' + score + ' / ' + (m.totalRounds || 10) + '</span>' +
+                     '<button class="live-watch" data-game-id="' + escapeHtml(m.gameId) + '">&gt; assistir</button>' +
+                   '</div>' +
+                   '</li>';
+          }).join("");
+
+          elements.liveMatches.querySelectorAll(".live-watch").forEach(function(btn) {
+            btn.addEventListener("click", function() {
+              spectateMatch(btn.dataset.gameId);
+            });
+          });
+          return;
+        }
+
+        if (queue.length) {
+          elements.liveMatches.innerHTML = queue.map(function(w) {
+            return '<li class="live-waiting-row">' +
+                   '<span class="live-waiting-dot"></span>' +
+                   '<span class="live-waiting-name">' + escapeHtml(w.username || "?") + '</span>' +
+                   '<span class="live-waiting-tag">esta esperando</span>' +
+                   '</li>';
+          }).join("");
+          return;
+        }
+
+        elements.liveMatches.innerHTML = '<li class="live-empty">nenhuma partida ao vivo agora.</li>';
+      }
+
       function loadAds() {
-        fetch(API_URL + "/api/ads")
+        fetch(API_URL + "/api/sponsors")
           .then(function(res) { return res.json(); })
           .then(function(data) {
             renderAds(data.left, elements.adsLeft);
@@ -258,23 +349,39 @@
 
         container.innerHTML = ads.map(function(ad) {
           const faviconUrl = getFaviconUrl(ad.link);
+          const dataAttrs = ' data-partner-position="' + escapeHtml(ad.position || "") +
+                            '" data-partner-name="' + escapeHtml(ad.company || "") +
+                            '" data-partner-active="' + (ad.is_active ? "1" : "0") +
+                            '" data-partner-link="' + escapeHtml(ad.link || "") + '"';
 
           if (!ad.is_active) {
-            return '<a href="/advertise.html" class="ad-card ad-placeholder">' +
-                   '<div class="ad-company"></div>' +
-                   '<div class="ad-headline">' + escapeHtml(ad.headline || "") + '</div>' +
-                   '<div class="ad-body">Clique para anunciar</div>' +
+            return '<a href="/partners.html" class="partner-tile partner-tile-empty"' + dataAttrs + '>' +
+                   '<div class="partner-name"></div>' +
+                   '<div class="partner-title">' + escapeHtml(ad.headline || "") + '</div>' +
+                   '<div class="partner-text">Clique para anunciar</div>' +
                    '</a>';
           }
 
-          return '<a href="' + escapeHtml(ad.link || "#") + '" target="_blank" rel="noopener" class="ad-card">' +
-                 '<img class="ad-favicon" src="' + escapeHtml(faviconUrl) + '" alt="" loading="lazy">' +
-                 '<div class="ad-company">' + escapeHtml(ad.company || "") + '</div>' +
-                 '<div class="ad-headline">' + escapeHtml(ad.headline || "") + '</div>' +
-                 '<div class="ad-body">' + escapeHtml(ad.body || "") + '</div>' +
-                 '<div class="ad-cta">ver mais &gt;</div>' +
+          return '<a href="' + escapeHtml(ad.link || "#") + '" target="_blank" rel="noopener" class="partner-tile"' + dataAttrs + '>' +
+                 '<img class="partner-icon" src="' + escapeHtml(faviconUrl) + '" alt="" loading="lazy">' +
+                 '<div class="partner-name">' + escapeHtml(ad.company || "") + '</div>' +
+                 '<div class="partner-title">' + escapeHtml(ad.headline || "") + '</div>' +
+                 '<div class="partner-text">' + escapeHtml(ad.body || "") + '</div>' +
+                 '<div class="partner-link">ver mais &gt;</div>' +
                  '</a>';
         }).join("");
+
+        const cards = container.querySelectorAll(".partner-tile");
+        cards.forEach(function(card) {
+          card.addEventListener("click", function() {
+            track("partner_clicked", {
+              position: card.dataset.partnerPosition,
+              company: card.dataset.partnerName,
+              active: card.dataset.partnerActive === "1",
+              link: card.dataset.partnerLink
+            });
+          });
+        });
       }
 
       function getFaviconUrl(link) {
@@ -297,15 +404,21 @@
           return;
         }
 
-        register(username);
-
         if (!isSocketOpen()) {
           pendingSearch = true;
           showStatus("conectando ao servidor...", "searching");
           return;
         }
 
-        triggerSearch();
+        pendingSearch = true;
+
+        if (registeredUsername === username) {
+          triggerSearch();
+          return;
+        }
+
+        register(username);
+        showStatus("registrando terminal antes de entrar na fila...", "searching");
       }
 
       function triggerSearch() {
@@ -317,38 +430,75 @@
         pendingSearch = false;
         isSearching = true;
         updateSearchButton();
+        startQueueMusic();
 
         ws.send(JSON.stringify({ type: "find_match" }));
         showStatus("procurando um oponente para voce...", "searching");
+        track("queue_joined", { username: username });
       }
 
       function cancelSearch() {
         pendingSearch = false;
         isSearching = false;
         updateSearchButton();
+        stopQueueMusic();
 
         if (isSocketOpen()) {
           ws.send(JSON.stringify({ type: "cancel_match" }));
         }
 
         showStatus("busca cancelada.", "");
+        track("queue_cancelled", { username: username });
       }
 
       function handleMessage(message) {
         switch (message.type) {
           case "registered":
             username = sanitizeUsername(message.username);
+            registeredUsername = username;
             elements.usernameInput.value = username;
             localStorage.setItem(STORAGE.username, username);
+            try { window.posthog && username && window.posthog.identify(username, { username: username }); } catch (e) {}
+            if (pendingSearch && !isSearching) {
+              triggerSearch();
+            }
             break;
 
           case "rankings":
             renderRankings(message.rankings || []);
             break;
 
+          case "active_matches":
+            renderLiveMatches(message.matches || [], message.waiting || []);
+            if (typeof message.onlineCount === "number" && elements.onlineCount) {
+              elements.onlineCount.textContent = String(message.onlineCount);
+            }
+            break;
+
+          case "spectate_started":
+            sessionStorage.setItem("spectateData", JSON.stringify({
+              gameId: message.gameId,
+              player0: message.player0,
+              player1: message.player1,
+              commands: Array.isArray(message.commands) ? message.commands : [],
+              totalRounds: message.totalRounds || 10,
+              roundTimeLimitMs: message.roundTimeLimitMs || 60000,
+              state: message.state || null,
+              clientId: clientId
+            }));
+            track("spectate_started", { game_id: message.gameId });
+            window.location.href = "/game.html?spectate=1";
+            break;
+
+          case "spectate_error":
+            showStatus(message.message || "partida nao esta mais ativa.", "error");
+            fetchLiveMatches();
+            break;
+
           case "searching":
             isSearching = true;
             updateSearchButton();
+            startQueueMusic();
             showStatus("fila aberta: aguardando outro terminal...", "searching");
             break;
 
@@ -356,6 +506,13 @@
             isSearching = false;
             pendingSearch = false;
             updateSearchButton();
+            stopQueueMusic();
+            playMatchFoundSound();
+            showStatus("partida encontrada. inicializando terminal...", "success");
+            track("match_found", {
+              opponent: message.opponent,
+              total_rounds: message.totalRounds || 10
+            });
             sessionStorage.setItem("gameData", JSON.stringify({
               gameId: message.gameId,
               playerIndex: message.playerIndex,
@@ -366,12 +523,15 @@
               roundTimeLimitMs: message.roundTimeLimitMs || 60000,
               clientId: clientId
             }));
-            window.location.href = "/game.html";
+            window.setTimeout(function() {
+              window.location.href = "/game.html";
+            }, 850);
             break;
 
           case "cancelled":
             isSearching = false;
             updateSearchButton();
+            stopQueueMusic();
             showStatus("busca cancelada.", "");
             break;
 
@@ -379,9 +539,134 @@
             isSearching = false;
             pendingSearch = false;
             updateSearchButton();
+            stopQueueMusic();
             showStatus(message.message || "nao foi possivel entrar na fila.", "error");
             break;
         }
+      }
+
+      function unlockAudio() {
+        const context = getAudioContext();
+        if (!context) {
+          return;
+        }
+
+        if (context.state === "suspended") {
+          context.resume().catch(function() {});
+        }
+      }
+
+      function getAudioContext() {
+        if (audioContext) {
+          return audioContext;
+        }
+
+        const AudioCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtor) {
+          return null;
+        }
+
+        audioContext = new AudioCtor();
+        audioMaster = audioContext.createGain();
+        audioMaster.gain.value = 0.16;
+        audioMaster.connect(audioContext.destination);
+        return audioContext;
+      }
+
+      function startQueueMusic() {
+        unlockAudio();
+
+        if (queueMusicTimer) {
+          return;
+        }
+
+        queueMusicStep = 0;
+        playQueueMusicStep();
+        queueMusicTimer = window.setInterval(playQueueMusicStep, 360);
+      }
+
+      function stopQueueMusic() {
+        if (!queueMusicTimer) {
+          return;
+        }
+
+        window.clearInterval(queueMusicTimer);
+        queueMusicTimer = null;
+      }
+
+      function playQueueMusicStep() {
+        const notes = [196, 247, 294, 247, 220, 277, 330, 277];
+        const note = notes[queueMusicStep % notes.length];
+        const accent = queueMusicStep % 4 === 0;
+
+        playTone(note, 0.11, { volume: accent ? 0.16 : 0.1, type: "square" });
+        playTone(note / 2, 0.09, { delay: 0.02, volume: 0.05, type: "triangle" });
+        queueMusicStep += 1;
+      }
+
+      function playMatchFoundSound() {
+        unlockAudio();
+        playTone(330, 0.08, { volume: 0.26, type: "square" });
+        playTone(660, 0.1, { delay: 0.09, volume: 0.28, type: "square" });
+        playTone(990, 0.16, { delay: 0.2, volume: 0.32, type: "triangle" });
+        playNoise(0.16, { delay: 0.12, volume: 0.16, frequency: 1600 });
+      }
+
+      function playTone(frequency, duration, options) {
+        const context = getAudioContext();
+        if (!context || !audioMaster) {
+          return;
+        }
+
+        const settings = options || {};
+        const start = context.currentTime + (settings.delay || 0);
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const volume = settings.volume || 0.12;
+
+        oscillator.type = settings.type || "square";
+        oscillator.frequency.setValueAtTime(frequency, start);
+
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(volume, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+        oscillator.connect(gain);
+        gain.connect(audioMaster);
+        oscillator.start(start);
+        oscillator.stop(start + duration + 0.03);
+      }
+
+      function playNoise(duration, options) {
+        const context = getAudioContext();
+        if (!context || !audioMaster) {
+          return;
+        }
+
+        const settings = options || {};
+        const start = context.currentTime + (settings.delay || 0);
+        const buffer = context.createBuffer(1, Math.floor(context.sampleRate * duration), context.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let index = 0; index < data.length; index += 1) {
+          data[index] = (Math.random() * 2 - 1) * (1 - index / data.length);
+        }
+
+        const source = context.createBufferSource();
+        const filter = context.createBiquadFilter();
+        const gain = context.createGain();
+
+        filter.type = "bandpass";
+        filter.frequency.setValueAtTime(settings.frequency || 1200, start);
+        filter.Q.value = 10;
+        gain.gain.setValueAtTime(settings.volume || 0.12, start);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+        source.buffer = buffer;
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioMaster);
+        source.start(start);
       }
 
       function renderRankings(rankings) {
@@ -396,21 +681,27 @@
         }
 
         const leader = rankings[0];
+        const leaderWins = Number(leader.wins || 0);
+        const leaderLosses = Number(leader.losses || 0);
         elements.leaderHighlight.innerHTML = [
           '<div class="label">Lider atual</div>',
           '<div class="name">' + escapeHtml(leader.username) + '</div>',
-          '<div class="score"><span>' + leader.score + '</span><small>pts</small></div>'
+          '<div class="score"><span>' + Number(leader.score) + '</span><small>pts</small></div>',
+          '<div class="wl-line"><span class="wl-win">' + leaderWins + 'V</span> <span class="wl-sep">/</span> <span class="wl-loss">' + leaderLosses + 'D</span></div>'
         ].join("");
 
         elements.rankingList.innerHTML = rankings.slice(0, 6).map(function(player, index) {
+          const w = Number(player.wins || 0);
+          const l = Number(player.losses || 0);
+          const score = Number(player.score || 0);
           return [
             '<li class="leader-item">',
             '  <div class="leader-rank">#' + (index + 1) + "</div>",
             '  <div class="leader-meta">',
             "    <strong>" + escapeHtml(player.username) + "</strong>",
-            "    <span>" + player.score + " vitorias acumuladas</span>",
+            '    <span><span class="wl-win">' + w + 'V</span> / <span class="wl-loss">' + l + 'D</span></span>',
             "  </div>",
-            '  <div class="leader-score">' + player.score + " pts</div>",
+            '  <div class="leader-score">' + score + " pts</div>",
             "</li>"
           ].join("");
         }).join("");
@@ -439,7 +730,7 @@
       }
 
       function sanitizeUsername(value) {
-        return String(value || "").replace(/\s+/g, " ").trim().slice(0, 20);
+        return String(value || "").replace(/\s+/g, " ").trim().slice(0, 24);
       }
 
       function isSocketOpen() {

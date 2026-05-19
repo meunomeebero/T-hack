@@ -4,16 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Anuncie // TERMINAL HACK</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="ui.css?v=3">
+  <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group identify setPersonProperties setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags resetGroups onFeatureFlags addFeatureFlagsHandler onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_j0R4f80F53ctkaYdSz9VEc0Vz1wFrs7V34jQszuSdN7', { api_host: 'https://analytics.bero.land', defaults: '2026-01-30' });
+    function track(event, props) { try { window.posthog && window.posthog.capture(event, props || {}); } catch (e) {} }
+  </script>
   <style>
-    .advertise-body {
+    .partners-body {
       min-height: 100vh;
       background: var(--carbon);
       color: var(--cement);
       overflow-x: hidden;
     }
 
-    .advertise-page {
+    .partners-page {
       width: min(760px, 100%);
       margin: 0 auto;
       padding: 44px 22px 66px;
@@ -35,17 +40,17 @@
       color: var(--amber);
     }
 
-    .advertise-header {
+    .partners-header {
       margin-bottom: 44px;
     }
 
-    .advertise-header h1 {
+    .partners-header h1 {
       font-size: 44px;
       letter-spacing: -4px;
       margin-bottom: 14px;
     }
 
-    .advertise-header p {
+    .partners-header p {
       max-width: 680px;
       color: var(--enamel);
       font-size: 16px;
@@ -53,14 +58,14 @@
       line-height: 24px;
     }
 
-    .advertise-card {
+    .partners-card {
       background: var(--carbon);
       border: 2px solid var(--clay);
       padding: 34px;
       margin-bottom: 22px;
     }
 
-    .advertise-card h3 {
+    .partners-card h3 {
       font-size: 14px;
       color: var(--amber);
       margin-bottom: 24px;
@@ -122,16 +127,16 @@
     }
 
     @media (max-width: 767px) {
-      .advertise-page {
+      .partners-page {
         padding: 22px 11px 44px;
       }
 
-      .advertise-header h1 {
+      .partners-header h1 {
         font-size: 34px;
         letter-spacing: -3px;
       }
 
-      .advertise-card {
+      .partners-card {
         padding: 22px;
       }
 
@@ -142,20 +147,20 @@
     }
   </style>
 </head>
-<body class="advertise-body">
-  <main class="advertise-page">
+<body class="partners-body">
+  <main class="partners-page">
     <a href="/" class="back-link">
       <span>&lt;</span> voltar para home
     </a>
 
-    <div class="advertise-header">
+    <div class="partners-header">
       <h1>ANUNCIE SEU PRODUTO</h1>
       <p>
         Alcance milhares de jogadores diariamente. Seu produto merece estar na tela de todos os hackers da arena.
       </p>
     </div>
 
-    <div class="advertise-card">
+    <div class="partners-card">
       <h3>> Contato comercial</h3>
       <div class="email-info">
         <span class="email-badge">Email comercial</span>
@@ -169,7 +174,7 @@
       </ul>
     </div>
 
-    <div class="advertise-card">
+    <div class="partners-card">
       <h3>> Formato dos anuncios</h3>
       <ul class="info-list">
         <li>Cards quadrados nas laterais da tela</li>

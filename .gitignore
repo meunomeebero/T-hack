@@ -2,6 +2,8 @@
 node_modules/
 npm-debug.log*
 server.log
+.shardcloud
+public/.env
 
 # Local runtime data
 data/
@@ -27,3 +29,5 @@ skills/
 tirinhas/
 tools/
 videomaker/
+.gstack/
+duck-virus/

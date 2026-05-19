@@ -4,11 +4,12 @@
   "description": "Multiplayer terminal typing game",
   "main": "server.js",
   "scripts": {
+    "build": "node --check server.js && node --check db.js && node --check src/*.js",
     "start": "node server.js",
     "dev": "node server.js"
   },
   "dependencies": {
-    "better-sqlite3": "^12.9.0",
+    "pg": "^8.20.0",
     "ws": "^8.16.0"
   }
 }
